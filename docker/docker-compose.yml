@@ -1,0 +1,140 @@
+version: '3.8'
+
+services:
+  # Основное приложение PaidSubscribeBot
+  PaidSubscribeBot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: PaidSubscribeBot
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+      - ../.env:/app/.env:ro
+    depends_on:
+      - redis
+      - postgres
+    environment:
+      - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://PaidSubscribeBot:PaidSubscribeBot_password@postgres:5432/PaidSubscribeBot
+      - REDIS_URL=redis://redis:6379/0
+    networks:
+      - PaidSubscribeBot_network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # PostgreSQL база данных
+  postgres:
+    image: postgres:15-alpine
+    container_name: PaidSubscribeBot_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: PaidSubscribeBot
+      POSTGRES_USER: PaidSubscribeBot
+      POSTGRES_PASSWORD: PaidSubscribeBot_password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - PaidSubscribeBot_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U PaidSubscribeBot -d PaidSubscribeBot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis для кеширования
+  redis:
+    image: redis:7-alpine
+    container_name: PaidSubscribeBot_redis
+    restart: unless-stopped
+    command: redis-server --requirepass redis_password
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - PaidSubscribeBot_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Nginx обратный прокси
+  nginx:
+    image: nginx:alpine
+    container_name: PaidSubscribeBot_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - PaidSubscribeBot
+    networks:
+      - PaidSubscribeBot_network
+
+  # Мониторинг с Prometheus (опционально)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: PaidSubscribeBot_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - PaidSubscribeBot_network
+    profiles:
+      - monitoring
+
+  # Grafana для визуализации метрик (опционально)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: PaidSubscribeBot_grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - PaidSubscribeBot_network
+    profiles:
+      - monitoring
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  PaidSubscribeBot_network:
+    driver: bridge 
