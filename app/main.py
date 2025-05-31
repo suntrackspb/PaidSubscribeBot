@@ -19,6 +19,7 @@ from app.config.settings import get_settings
 from app.config.database import init_database, close_database
 from app.utils.logger import setup_logging
 from app.bot.handlers import start
+from app.bot.handlers import payments  # Добавляем импорт платежей
 
 
 async def create_bot() -> Bot:
@@ -55,6 +56,7 @@ async def create_dispatcher() -> Dispatcher:
     
     # Подключаем роутеры
     dp.include_router(start.router)
+    dp.include_router(payments.router)  # Добавляем роутер платежей
     
     return dp
 

@@ -5,6 +5,7 @@ Inline клавиатуры для PaidSubscribeBot.
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from typing import List, Optional
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.database.models.subscription import SubscriptionDuration
 from app.database.models.payment import PaymentMethod
@@ -357,4 +358,70 @@ def url_button(text: str, url: str) -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=text, url=url)]
     ])
-    return keyboard 
+    return keyboard
+
+
+def get_subscription_plans_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора тарифных планов"""
+    keyboard = InlineKeyboardBuilder()
+    
+    keyboard.row(
+        InlineKeyboardButton(text="🔹 Базовый - 199₽", callback_data="subscription_basic")
+    )
+    keyboard.row(
+        InlineKeyboardButton(text="💎 Премиум - 499₽", callback_data="subscription_premium")
+    )
+    keyboard.row(
+        InlineKeyboardButton(text="👑 VIP - 999₽", callback_data="subscription_vip")
+    )
+    keyboard.row(
+        InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")
+    )
+    
+    return keyboard.as_markup()
+
+
+def get_payment_methods_keyboard(available_methods: list, subscription_type: str, price: int) -> InlineKeyboardMarkup:
+    """Клавиатура выбора способов оплаты"""
+    from app.database.models.payment import PaymentMethod
+    
+    keyboard = InlineKeyboardBuilder()
+    
+    # Маппинг методов на кнопки
+    method_buttons = {
+        PaymentMethod.YOOMONEY: ("💳 YooMoney", "yoomoney"),
+        PaymentMethod.TELEGRAM_STARS: ("⭐ Telegram Stars", "stars"),
+        PaymentMethod.SBP: ("📱 СБП", "sbp"),
+        PaymentMethod.BANK_CARD: ("💳 Банковская карта", "card")
+    }
+    
+    # Добавляем доступные методы
+    for method in available_methods:
+        if method in method_buttons:
+            text, callback_key = method_buttons[method]
+            callback_data = f"pay_{callback_key}_{subscription_type}_{price}"
+            keyboard.row(
+                InlineKeyboardButton(text=text, callback_data=callback_data)
+            )
+    
+    # Кнопка "Назад"
+    keyboard.row(
+        InlineKeyboardButton(text="🔙 Назад к тарифам", callback_data="main_menu")
+    )
+    
+    return keyboard.as_markup()
+
+
+def get_main_menu_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура главного меню"""
+    keyboard = InlineKeyboardBuilder()
+    
+    keyboard.row(
+        InlineKeyboardButton(text="💳 Оплатить подписку", callback_data="subscription_plans")
+    )
+    keyboard.row(
+        InlineKeyboardButton(text="ℹ️ Информация", callback_data="info"),
+        InlineKeyboardButton(text="🆘 Поддержка", callback_data="support")
+    )
+    
+    return keyboard.as_markup() 
