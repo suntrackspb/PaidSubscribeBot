@@ -1,14 +1,47 @@
+# Основные зависимости для PaidSubscribeBot
+
 # Telegram Bot Framework
-aiogram==3.3.0
-aiohttp==3.9.1
+aiogram==3.4.1
 
 # База данных
 sqlalchemy==2.0.25
-alembic==1.13.1
 aiosqlite==0.19.0
-asyncpg==0.29.0  # для PostgreSQL
+alembic==1.13.1
 
-# Redis для кеширования
+# Настройки и конфигурация
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+
+# Криптография и безопасность
+cryptography>=41.0.0
+
+# HTTP клиент
+httpx==0.26.0
+
+# Логирование
+structlog==23.2.0
+colorama==0.4.6
+
+# Платежные системы
+yoomoney==0.1.2
+
+# QR-коды для СБП
+qrcode[pil]==7.4.2
+pillow==10.2.0
+
+# Валидация и парсинг данных
+validators==0.22.0
+
+# Дата и время
+python-dateutil==2.8.2
+
+# Утилиты
+click==8.1.7
+typing-extensions==4.9.0
+
+# Асинхронные задачи (опционально)
+celery==5.3.4
 redis==5.0.1
 aioredis==2.0.1
 
@@ -16,45 +49,18 @@ aioredis==2.0.1
 fastapi==0.108.0
 uvicorn==0.25.0
 
-# Платежные системы
-yoomoney==0.1.2
-requests==2.31.0
-
-# Криптография и безопасность
-cryptography>=41.0.0
-pyjwt==2.8.0
-python-multipart==0.0.6
-
-# Конфигурация
-python-dotenv==1.0.0
-pydantic==2.5.2
-pydantic-settings==2.1.0
-
-# Логирование и мониторинг
-structlog==23.2.0
-colorlog==6.8.0
-
-# Работа с датами
-python-dateutil==2.8.2
-
-# Валидация данных
-validators==0.22.0
-
-# HTTP клиент
-httpx==0.26.0
-
-# Работа с JSON
-orjson==3.9.10
-
 # Планировщик задач
 apscheduler==3.10.4
 
-# Работа с изображениями (для QR кодов)
-qrcode==7.4.2
-Pillow>=10.0.0
+# Мониторинг (опционально)
+sentry-sdk==1.40.0
+prometheus-client==0.19.0
+
+# Работа с JSON
+orjson==3.9.12
+
+# Логирование и мониторинг
+colorlog==6.8.0
 
 # Веб-интерфейс
-jinja2==3.1.2
-
-# Утилиты
-click==8.1.7 
+jinja2==3.1.2 
