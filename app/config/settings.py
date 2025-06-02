@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     
     # Telegram Stars Configuration
     telegram_stars_enabled: bool = True
-    telegram_stars_rate: int = 100  # 1 звезда = 100 рублей
+    telegram_stars_rate: int = 100
     
     # Webhook Configuration
     webhook_host: Optional[str] = None
@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     # Logging Configuration
     log_level: str = "INFO"
     log_file: str = "logs/bot.log"
-    log_max_size: int = 10485760  # 10MB
+    log_max_size: int = 10485760
     log_backup_count: int = 5
     
     # Development Settings
@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     # Rate Limiting
     rate_limit_enabled: bool = True
     rate_limit_calls: int = 10
-    rate_limit_period: int = 60  # секунд
+    rate_limit_period: int = 60
     
     # Maintenance Mode
     maintenance_mode: bool = False
@@ -149,9 +149,12 @@ class Settings(BaseSettings):
 
 
 # Создание глобального экземпляра настроек
-settings = Settings()
+_settings = None
 
 
 def get_settings() -> Settings:
     """Получение настроек приложения"""
-    return settings 
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings 

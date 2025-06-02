@@ -5,6 +5,7 @@
 
 import asyncio
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher
@@ -17,10 +18,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.config.settings import get_settings
 from app.config.database import init_database, close_database
-from app.utils.logger import setup_logging
+from app.utils.logger import setup_logging, get_logger
 from app.bot.handlers import start
 from app.bot.handlers import payments  # Добавляем импорт платежей
 
+# Инициализируем логгер
+logger = get_logger(__name__)
 
 async def create_bot() -> Bot:
     """
@@ -235,9 +238,6 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    # Импорт для datetime
-    from datetime import datetime
-    
     # Проверка версии Python
     if sys.version_info < (3, 9):
         print("❌ Требуется Python 3.9 или выше")
