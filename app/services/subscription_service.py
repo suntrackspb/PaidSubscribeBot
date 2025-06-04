@@ -14,7 +14,7 @@ from app.database.models.user import User
 from app.database.models.subscription import Subscription, SubscriptionStatus
 from app.database.models.payment import Payment, PaymentStatus
 from app.database.models.channel import Channel
-from app.config.database import get_db_session
+from app.config.database import AsyncSessionLocal
 from app.utils.logger import get_logger
 
 
@@ -54,7 +54,7 @@ class SubscriptionService:
         Returns:
             Subscription: Созданная подписка
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             # Проверяем существование пользователя и канала
             user_stmt = select(User).where(User.id == user_id)
             user_result = await session.execute(user_stmt)
@@ -112,7 +112,7 @@ class SubscriptionService:
         Returns:
             bool: True если подписка активирована
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = select(Subscription).where(Subscription.id == subscription_id)
             result = await session.execute(stmt)
             subscription = result.scalar_one_or_none()
@@ -148,7 +148,7 @@ class SubscriptionService:
         Returns:
             bool: True если подписка деактивирована
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = select(Subscription).where(Subscription.id == subscription_id)
             result = await session.execute(stmt)
             subscription = result.scalar_one_or_none()
@@ -185,7 +185,7 @@ class SubscriptionService:
         Returns:
             Optional[Subscription]: Активная подписка или None
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = (
                 select(Subscription)
                 .where(
@@ -213,7 +213,7 @@ class SubscriptionService:
         Returns:
             List[Subscription]: Список подписок
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = select(Subscription).where(Subscription.user_id == user_id)
             
             if active_only:
@@ -260,7 +260,7 @@ class SubscriptionService:
         Returns:
             bool: True если подписка продлена
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = select(Subscription).where(Subscription.id == subscription_id)
             result = await session.execute(stmt)
             subscription = result.scalar_one_or_none()
@@ -300,7 +300,7 @@ class SubscriptionService:
         """
         cutoff_date = datetime.utcnow() + timedelta(days=days_ahead)
         
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = (
                 select(Subscription)
                 .where(
@@ -323,7 +323,7 @@ class SubscriptionService:
         Returns:
             List[Subscription]: Список истекших подписок
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = (
                 select(Subscription)
                 .where(
@@ -370,7 +370,7 @@ class SubscriptionService:
         Returns:
             Dict[str, Any]: Статистика
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             base_stmt = select(Subscription)
             
             if channel_id:

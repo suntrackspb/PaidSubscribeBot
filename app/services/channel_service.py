@@ -14,7 +14,7 @@ from sqlalchemy import select, update
 from app.database.models.channel import Channel
 from app.database.models.user import User
 from app.database.models.subscription import Subscription
-from app.config.database import get_db_session
+from app.config.database import AsyncSessionLocal
 from app.config.settings import get_settings
 from app.utils.logger import get_logger
 
@@ -45,7 +45,7 @@ class ChannelService:
         Returns:
             Optional[Channel]: Канал или None
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = select(Channel).where(Channel.id == channel_id)
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
@@ -60,7 +60,7 @@ class ChannelService:
         Returns:
             Optional[Channel]: Канал или None
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = select(Channel).where(Channel.telegram_id == telegram_id)
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
@@ -88,7 +88,7 @@ class ChannelService:
         Returns:
             Channel: Созданный канал
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             # Проверяем, не существует ли уже канал с таким telegram_id
             existing_stmt = select(Channel).where(Channel.telegram_id == telegram_id)
             existing_result = await session.execute(existing_stmt)
@@ -146,7 +146,7 @@ class ChannelService:
         Returns:
             bool: True если канал обновлен
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = select(Channel).where(Channel.id == channel_id)
             result = await session.execute(stmt)
             channel = result.scalar_one_or_none()
@@ -381,7 +381,7 @@ class ChannelService:
         Returns:
             List[Channel]: Список каналов
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = select(Channel)
             
             if active_only:
@@ -402,7 +402,7 @@ class ChannelService:
         Returns:
             bool: True если канал деактивирован
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = (
                 update(Channel)
                 .where(Channel.id == channel_id)
@@ -430,7 +430,7 @@ class ChannelService:
         Returns:
             Dict[str, Any]: Статистика канала
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             # Получаем канал
             channel_stmt = select(Channel).where(Channel.id == channel_id)
             channel_result = await session.execute(channel_stmt)

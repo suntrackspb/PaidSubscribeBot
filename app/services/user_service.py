@@ -11,7 +11,7 @@ from sqlalchemy import select, update, and_
 
 from app.database.models.user import User
 from app.database.models.subscription import Subscription
-from app.config.database import get_db_session
+from app.config.database import AsyncSessionLocal
 from app.utils.logger import get_logger
 from app.utils.crypto import encrypt_data, decrypt_data
 
@@ -51,7 +51,7 @@ class UserService:
         Returns:
             User: Объект пользователя
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             # Пытаемся найти существующего пользователя
             stmt = select(User).where(User.telegram_id == telegram_id)
             result = await session.execute(stmt)
@@ -122,7 +122,7 @@ class UserService:
         Returns:
             Optional[User]: Пользователь или None
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = select(User).where(User.telegram_id == telegram_id)
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
@@ -137,7 +137,7 @@ class UserService:
         Returns:
             Optional[User]: Пользователь с активной подпиской или None
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = (
                 select(User)
                 .join(Subscription)
@@ -159,7 +159,7 @@ class UserService:
         Args:
             telegram_id: ID пользователя в Telegram
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = (
                 update(User)
                 .where(User.telegram_id == telegram_id)
@@ -181,7 +181,7 @@ class UserService:
         Returns:
             bool: True если пользователь деактивирован
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = (
                 update(User)
                 .where(User.telegram_id == telegram_id)
@@ -209,7 +209,7 @@ class UserService:
         Returns:
             bool: True если пользователь активирован
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = (
                 update(User)
                 .where(User.telegram_id == telegram_id)
@@ -246,7 +246,7 @@ class UserService:
         Returns:
             List[User]: Список пользователей
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = select(User)
             
             if active_only:
@@ -283,7 +283,7 @@ class UserService:
         Returns:
             int: Количество пользователей
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = select(User.id)
             
             if active_only:
@@ -315,7 +315,7 @@ class UserService:
         """
         cutoff_date = datetime.utcnow() - timedelta(days=days)
         
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = (
                 select(User)
                 .where(
@@ -354,7 +354,7 @@ class UserService:
         Returns:
             bool: True если статус изменен
         """
-        async with get_db_session() as session:
+        async with AsyncSessionLocal() as session:
             stmt = (
                 update(User)
                 .where(User.telegram_id == telegram_id)
