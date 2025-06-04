@@ -20,7 +20,9 @@ from app.config.settings import get_settings
 from app.config.database import init_database, close_database
 from app.utils.logger import setup_logging, get_logger
 from app.bot.handlers import start
-from app.bot.handlers import payments  # Добавляем импорт платежей
+from app.bot.handlers import payments
+from app.bot.handlers import subscription  # Добавляем обработчик подписок
+from app.tasks import start_background_tasks, stop_background_tasks  # Добавляем задачи
 
 # Инициализируем логгер
 logger = get_logger(__name__)
@@ -57,9 +59,10 @@ async def create_dispatcher() -> Dispatcher:
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
     
-    # Подключаем роутеры
+    # Подключаем роутеры в правильном порядке
     dp.include_router(start.router)
-    dp.include_router(payments.router)  # Добавляем роутер платежей
+    dp.include_router(subscription.subscription_router)  # Обработчики подписок
+    dp.include_router(payments.router)  # Обработчики платежей
     
     return dp
 
@@ -76,7 +79,7 @@ async def setup_bot_commands(bot: Bot) -> None:
     commands = [
         BotCommand(command="start", description="🏠 Главное меню"),
         BotCommand(command="help", description="📖 Справка"),
-        BotCommand(command="subscription", description="📋 Моя подписка"),
+        BotCommand(command="subscription", description="📋 Управление подписками"),
         BotCommand(command="pay", description="💳 Оплатить подписку"),
         BotCommand(command="support", description="🆘 Поддержка"),
     ]
@@ -98,12 +101,13 @@ async def setup_admin_commands(bot: Bot) -> None:
     admin_commands = [
         BotCommand(command="start", description="🏠 Главное меню"),
         BotCommand(command="help", description="📖 Справка"),
-        BotCommand(command="subscription", description="📋 Моя подписка"),
+        BotCommand(command="subscription", description="📋 Управление подписками"),
         BotCommand(command="pay", description="💳 Оплатить подписку"),
         BotCommand(command="support", description="🆘 Поддержка"),
         BotCommand(command="admin", description="👑 Панель администратора"),
         BotCommand(command="stats", description="📊 Статистика"),
         BotCommand(command="users", description="👥 Пользователи"),
+        BotCommand(command="channels", description="📺 Каналы"),
         BotCommand(command="broadcast", description="📢 Рассылка"),
         BotCommand(command="settings", description="⚙️ Настройки"),
     ]
@@ -117,6 +121,43 @@ async def setup_admin_commands(bot: Bot) -> None:
             )
         except Exception as e:
             logger.warning(f"Не удалось установить команды для админа {admin_id}: {e}")
+
+
+async def initialize_default_data():
+    """Инициализация базовых данных"""
+    try:
+        from app.services.channel_service import ChannelService
+        
+        channel_service = ChannelService()
+        
+        # Проверяем, есть ли каналы в системе
+        channels = await channel_service.get_all_channels()
+        
+        if not channels:
+            # Создаем канал по умолчанию из настроек
+            settings = get_settings()
+            
+            try:
+                channel = await channel_service.create_channel(
+                    telegram_id=int(settings.telegram_channel_id.replace('@', '').replace('-100', '')),
+                    title="Закрытый канал",
+                    username=settings.telegram_channel_id.replace('@', ''),
+                    description="Эксклюзивный контент для подписчиков",
+                    monthly_price=199.0,
+                    yearly_price=1990.0
+                )
+                
+                logger.info(
+                    "Создан канал по умолчанию",
+                    channel_id=channel.id,
+                    title=channel.title
+                )
+                
+            except Exception as e:
+                logger.warning(f"Не удалось создать канал по умолчанию: {e}")
+        
+    except Exception as e:
+        logger.error(f"Ошибка инициализации базовых данных: {e}")
 
 
 async def on_startup(bot: Bot, dispatcher: Dispatcher) -> None:
@@ -139,6 +180,9 @@ async def on_startup(bot: Bot, dispatcher: Dispatcher) -> None:
         logger.error(f"Ошибка инициализации базы данных: {e}")
         raise
     
+    # Инициализация базовых данных
+    await initialize_default_data()
+    
     # Настройка команд бота
     try:
         await setup_bot_commands(bot)
@@ -146,6 +190,14 @@ async def on_startup(bot: Bot, dispatcher: Dispatcher) -> None:
         logger.info("Команды бота настроены")
     except Exception as e:
         logger.error(f"Ошибка настройки команд: {e}")
+    
+    # Запуск фоновых задач
+    try:
+        # Запускаем задачи в отдельной корутине
+        asyncio.create_task(start_background_tasks(bot))
+        logger.info("Фоновые задачи запущены")
+    except Exception as e:
+        logger.error(f"Ошибка запуска фоновых задач: {e}")
     
     # Получение информации о боте
     try:
@@ -164,7 +216,8 @@ async def on_startup(bot: Bot, dispatcher: Dispatcher) -> None:
     startup_message = f"🤖 <b>PaidSubscribeBot запущен!</b>\n\n" \
                      f"<b>Версия:</b> 1.0.0\n" \
                      f"<b>Время запуска:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\n" \
-                     f"<b>Режим:</b> {'🔧 Техническое обслуживание' if settings.maintenance_mode else '✅ Рабочий'}"
+                     f"<b>Режим:</b> {'🔧 Техническое обслуживание' if settings.maintenance_mode else '✅ Рабочий'}\n" \
+                     f"<b>Фоновые задачи:</b> ✅ Запущены"
     
     for admin_id in settings.admin_ids:
         try:
@@ -183,6 +236,13 @@ async def on_shutdown(bot: Bot, dispatcher: Dispatcher) -> None:
     """
     logger.info("Остановка PaidSubscribeBot...")
     
+    # Остановка фоновых задач
+    try:
+        await stop_background_tasks(bot)
+        logger.info("Фоновые задачи остановлены")
+    except Exception as e:
+        logger.error(f"Ошибка остановки фоновых задач: {e}")
+    
     # Закрытие соединения с базой данных
     try:
         await close_database()
@@ -199,10 +259,7 @@ async def on_shutdown(bot: Bot, dispatcher: Dispatcher) -> None:
         try:
             await bot.send_message(admin_id, shutdown_message, parse_mode="HTML")
         except Exception as e:
-            logger.warning(f"Не удалось отправить уведомление об остановке админу {admin_id}: {e}")
-    
-    # Закрытие сессии бота
-    await bot.session.close()
+            logger.warning(f"Не удалось отправить уведомление админу {admin_id}: {e}")
 
 
 async def main() -> None:

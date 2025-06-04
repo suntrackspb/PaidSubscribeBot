@@ -424,4 +424,180 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🆘 Поддержка", callback_data="support")
     )
     
-    return keyboard.as_markup() 
+    return keyboard.as_markup()
+
+
+def get_subscription_menu_keyboard(has_subscription: bool = False) -> InlineKeyboardMarkup:
+    """
+    Клавиатура меню подписок.
+    
+    Args:
+        has_subscription: Есть ли у пользователя активная подписка
+    """
+    keyboard = []
+    
+    if has_subscription:
+        keyboard.append([
+            InlineKeyboardButton(text="📋 Мои подписки", callback_data="my_subscriptions")
+        ])
+        keyboard.append([
+            InlineKeyboardButton(text="🔄 Продлить подписку", callback_data="new_subscription")
+        ])
+        keyboard.append([
+            InlineKeyboardButton(text="📱 Перейти в канал", url="https://t.me/your_channel")
+        ])
+    else:
+        keyboard.append([
+            InlineKeyboardButton(text="💳 Оформить подписку", callback_data="new_subscription")
+        ])
+    
+    keyboard.append([
+        InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")
+    ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def get_subscription_plans_keyboard(channel) -> InlineKeyboardMarkup:
+    """
+    Клавиатура планов подписки для канала.
+    
+    Args:
+        channel: Объект канала с ценами
+    """
+    keyboard = []
+    
+    # Месячная подписка
+    if channel.monthly_price:
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"📅 Месячная подписка - {channel.monthly_price} ₽",
+                callback_data="plan_monthly"
+            )
+        ])
+    
+    # Годовая подписка
+    if channel.yearly_price:
+        discount = 0
+        if channel.monthly_price:
+            discount = round((1 - (channel.yearly_price / (channel.monthly_price * 12))) * 100)
+        
+        text = f"📆 Годовая подписка - {channel.yearly_price} ₽"
+        if discount > 0:
+            text += f" (-{discount}%)"
+        
+        keyboard.append([
+            InlineKeyboardButton(text=text, callback_data="plan_yearly")
+        ])
+    
+    keyboard.append([
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="subscription_menu")
+    ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def get_payment_methods_keyboard(available_methods: List[PaymentMethod]) -> InlineKeyboardMarkup:
+    """
+    Клавиатура методов оплаты.
+    
+    Args:
+        available_methods: Список доступных методов оплаты
+    """
+    keyboard = []
+    
+    method_names = {
+        PaymentMethod.YOOMONEY: "💰 YooMoney",
+        PaymentMethod.TELEGRAM_STARS: "⭐ Telegram Stars", 
+        PaymentMethod.SBP: "🚀 СБП",
+        PaymentMethod.BANK_CARD: "💳 Банковская карта",
+        PaymentMethod.CRYPTO: "₿ Криптовалюта"
+    }
+    
+    for method in available_methods:
+        if method in method_names:
+            keyboard.append([
+                InlineKeyboardButton(
+                    text=method_names[method],
+                    callback_data=f"pay_{method.value}"
+                )
+            ])
+    
+    keyboard.append([
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="subscription_menu")
+    ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def get_channels_list_keyboard(channels: list) -> InlineKeyboardMarkup:
+    """
+    Клавиатура списка каналов для выбора.
+    
+    Args:
+        channels: Список каналов
+    """
+    keyboard = []
+    
+    for channel in channels:
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"📺 {channel.title}",
+                callback_data=f"select_channel_{channel.id}"
+            )
+        ])
+    
+    keyboard.append([
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")
+    ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def get_admin_subscription_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура администрирования подписок"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats"),
+            InlineKeyboardButton(text="👥 Пользователи", callback_data="admin_users")
+        ],
+        [
+            InlineKeyboardButton(text="📺 Каналы", callback_data="admin_channels"),
+            InlineKeyboardButton(text="💳 Платежи", callback_data="admin_payments")
+        ],
+        [
+            InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast"),
+            InlineKeyboardButton(text="⚙️ Настройки", callback_data="admin_settings")
+        ],
+        [
+            InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main")
+        ]
+    ])
+    return keyboard
+
+
+def get_notification_actions_keyboard(subscription_id: int) -> InlineKeyboardMarkup:
+    """
+    Клавиатура действий для уведомлений о подписке.
+    
+    Args:
+        subscription_id: ID подписки
+    """
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="💳 Продлить подписку",
+                callback_data=f"renew_{subscription_id}"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="ℹ️ Информация о подписке",
+                callback_data=f"sub_info_{subscription_id}"
+            )
+        ],
+        [
+            InlineKeyboardButton(text="📞 Поддержка", callback_data="support")
+        ]
+    ])
+    return keyboard 

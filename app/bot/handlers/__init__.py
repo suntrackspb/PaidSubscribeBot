@@ -1,7 +1,13 @@
 """
-Обработчики команд и callback'ов для PaidSubscribeBot.
+Обработчики событий Telegram бота для PaidSubscribeBot.
 """
 
-from app.bot.handlers import start
+from . import start
+from . import payments
+from . import subscription
 
-__all__ = ["start"]
+__all__ = [
+    "start",
+    "payments", 
+    "subscription"
+]
