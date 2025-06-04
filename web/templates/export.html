@@ -1,0 +1,618 @@
+{% extends "base.html" %}
+
+{% block title %}Экспорт данных - Админ Панель{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0 text-gray-800">Экспорт данных</h1>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-info" onclick="showScheduleModal()">
+                        <i class="fas fa-clock"></i> Планировщик
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="location.reload()">
+                        <i class="fas fa-sync"></i> Обновить
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Быстрый экспорт -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Быстрый экспорт</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <div class="card border-left-primary h-100 cursor-pointer" onclick="quickExport('users', 'csv')">
+                                <div class="card-body text-center py-4">
+                                    <i class="fas fa-users fa-3x text-primary mb-3"></i>
+                                    <h5 class="card-title">Пользователи</h5>
+                                    <p class="card-text small">CSV формат</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card border-left-success h-100 cursor-pointer" onclick="quickExport('subscriptions', 'csv')">
+                                <div class="card-body text-center py-4">
+                                    <i class="fas fa-star fa-3x text-success mb-3"></i>
+                                    <h5 class="card-title">Подписки</h5>
+                                    <p class="card-text small">CSV формат</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card border-left-info h-100 cursor-pointer" onclick="quickExport('payments', 'csv')">
+                                <div class="card-body text-center py-4">
+                                    <i class="fas fa-credit-card fa-3x text-info mb-3"></i>
+                                    <h5 class="card-title">Платежи</h5>
+                                    <p class="card-text small">CSV формат</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card border-left-warning h-100 cursor-pointer" onclick="quickExport('full_backup', 'zip')">
+                                <div class="card-body text-center py-4">
+                                    <i class="fas fa-archive fa-3x text-warning mb-3"></i>
+                                    <h5 class="card-title">Полный бэкап</h5>
+                                    <p class="card-text small">ZIP архив</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Настраиваемый экспорт -->
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Настраиваемый экспорт</h6>
+                </div>
+                <div class="card-body">
+                    <form id="exportForm">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="data_type" class="form-label">Тип данных</label>
+                                <select class="form-select" id="data_type" required>
+                                    <option value="">Выберите тип данных</option>
+                                    <option value="users">Пользователи</option>
+                                    <option value="subscriptions">Подписки</option>
+                                    <option value="payments">Платежи</option>
+                                    <option value="analytics">Аналитика</option>
+                                    <option value="channels">Каналы</option>
+                                    <option value="promocodes">Промокоды</option>
+                                    <option value="referrals">Рефералы</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="format_type" class="form-label">Формат</label>
+                                <select class="form-select" id="format_type" required>
+                                    <option value="csv">CSV</option>
+                                    <option value="json">JSON</option>
+                                    <option value="excel">Excel (XLSX)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="start_date" class="form-label">Дата начала</label>
+                                <input type="date" class="form-control" id="start_date">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="end_date" class="form-label">Дата окончания</label>
+                                <input type="date" class="form-control" id="end_date">
+                            </div>
+                        </div>
+
+                        <!-- Дополнительные фильтры для пользователей -->
+                        <div id="user_filters" class="filter-section" style="display: none;">
+                            <h6 class="text-primary mb-3">Фильтры для пользователей</h6>
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label for="user_status" class="form-label">Статус</label>
+                                    <select class="form-select" id="user_status">
+                                        <option value="">Все</option>
+                                        <option value="active">Активные</option>
+                                        <option value="banned">Заблокированные</option>
+                                        <option value="subscribed">С подпиской</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="include_referrals" class="form-label">Рефералы</label>
+                                    <select class="form-select" id="include_referrals">
+                                        <option value="all">Все пользователи</option>
+                                        <option value="only_referrals">Только рефералы</option>
+                                        <option value="exclude_referrals">Исключить рефералов</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Дополнительные фильтры для подписок -->
+                        <div id="subscription_filters" class="filter-section" style="display: none;">
+                            <h6 class="text-primary mb-3">Фильтры для подписок</h6>
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label for="subscription_status" class="form-label">Статус подписки</label>
+                                    <select class="form-select" id="subscription_status">
+                                        <option value="">Все</option>
+                                        <option value="active">Активные</option>
+                                        <option value="expired">Истекшие</option>
+                                        <option value="cancelled">Отменённые</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="channel_filter" class="form-label">Канал</label>
+                                    <select class="form-select" id="channel_filter">
+                                        <option value="">Все каналы</option>
+                                        <!-- Заполняется через AJAX -->
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Дополнительные фильтры для платежей -->
+                        <div id="payment_filters" class="filter-section" style="display: none;">
+                            <h6 class="text-primary mb-3">Фильтры для платежей</h6>
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label for="payment_status" class="form-label">Статус платежа</label>
+                                    <select class="form-select" id="payment_status">
+                                        <option value="">Все</option>
+                                        <option value="pending">Ожидает</option>
+                                        <option value="paid">Оплачено</option>
+                                        <option value="failed">Ошибка</option>
+                                        <option value="refunded">Возврат</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="payment_method" class="form-label">Платежная система</label>
+                                    <select class="form-select" id="payment_method">
+                                        <option value="">Все</option>
+                                        <option value="yoomoney">YooMoney</option>
+                                        <option value="telegram_stars">Telegram Stars</option>
+                                        <option value="sbp">СБП</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="min_amount" class="form-label">Мин. сумма</label>
+                                    <input type="number" class="form-control" id="min_amount" min="0" step="0.01">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-download"></i> Экспортировать
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary ms-2" onclick="resetForm()">
+                                    <i class="fas fa-undo"></i> Сбросить
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- История экспортов -->
+        <div class="col-lg-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">История экспортов</h6>
+                </div>
+                <div class="card-body">
+                    <div id="export-history">
+                        <!-- Заполняется через AJAX -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно планировщика -->
+<div class="modal fade" id="scheduleModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Планировщик экспортов</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="scheduleForm">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="schedule_type" class="form-label">Тип данных</label>
+                            <select class="form-select" id="schedule_type" required>
+                                <option value="users">Пользователи</option>
+                                <option value="subscriptions">Подписки</option>
+                                <option value="payments">Платежи</option>
+                                <option value="full_backup">Полный бэкап</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="schedule_format" class="form-label">Формат</label>
+                            <select class="form-select" id="schedule_format" required>
+                                <option value="csv">CSV</option>
+                                <option value="excel">Excel</option>
+                                <option value="zip">ZIP</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="schedule_frequency" class="form-label">Периодичность</label>
+                            <select class="form-select" id="schedule_frequency" required>
+                                <option value="daily">Ежедневно</option>
+                                <option value="weekly">Еженедельно</option>
+                                <option value="monthly">Ежемесячно</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="schedule_time" class="form-label">Время</label>
+                            <input type="time" class="form-control" id="schedule_time" value="03:00" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="schedule_email" class="form-label">Email для отправки (опционально)</label>
+                        <input type="email" class="form-control" id="schedule_email" placeholder="admin@example.com">
+                    </div>
+                </form>
+
+                <!-- Список запланированных экспортов -->
+                <div class="mt-4">
+                    <h6 class="text-primary">Запланированные экспорты</h6>
+                    <div id="scheduled-exports">
+                        <!-- Заполняется через AJAX -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveSchedule()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно прогресса -->
+<div class="modal fade" id="progressModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Экспорт данных</h5>
+            </div>
+            <div class="modal-body text-center">
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+                <p>Подготовка данных для экспорта...</p>
+                <div class="progress">
+                    <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.cursor-pointer {
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+.cursor-pointer:hover {
+    transform: scale(1.02);
+}
+.filter-section {
+    border-left: 3px solid #4e73df;
+    padding-left: 15px;
+    margin-bottom: 20px;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Установка текущей даты как конечной
+    document.getElementById('end_date').valueAsDate = new Date();
+    
+    // Установка даты месяц назад как начальной
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - 1);
+    document.getElementById('start_date').valueAsDate = startDate;
+    
+    // Обработчик изменения типа данных
+    document.getElementById('data_type').addEventListener('change', function() {
+        showRelevantFilters(this.value);
+    });
+    
+    // Обработчик формы экспорта
+    document.getElementById('exportForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        performExport();
+    });
+    
+    // Загрузка истории экспортов
+    loadExportHistory();
+    loadChannels();
+});
+
+function showRelevantFilters(dataType) {
+    // Скрываем все фильтры
+    document.querySelectorAll('.filter-section').forEach(section => {
+        section.style.display = 'none';
+    });
+    
+    // Показываем соответствующие фильтры
+    if (dataType === 'users') {
+        document.getElementById('user_filters').style.display = 'block';
+    } else if (dataType === 'subscriptions') {
+        document.getElementById('subscription_filters').style.display = 'block';
+    } else if (dataType === 'payments') {
+        document.getElementById('payment_filters').style.display = 'block';
+    }
+}
+
+function quickExport(dataType, format) {
+    const progressModal = new bootstrap.Modal(document.getElementById('progressModal'));
+    progressModal.show();
+    
+    const url = `/api/export/${dataType}?format=${format}`;
+    
+    // Создаем скрытую ссылку для скачивания
+    fetch(url)
+        .then(response => {
+            if (response.ok) {
+                return response.blob();
+            }
+            throw new Error('Ошибка экспорта');
+        })
+        .then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `${dataType}_${new Date().toISOString().split('T')[0]}.${format}`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            
+            progressModal.hide();
+            showNotification('Экспорт успешно завершен', 'success');
+            loadExportHistory();
+        })
+        .catch(error => {
+            progressModal.hide();
+            showNotification('Ошибка экспорта: ' + error.message, 'error');
+        });
+}
+
+function performExport() {
+    const formData = new FormData(document.getElementById('exportForm'));
+    const params = new URLSearchParams();
+    
+    // Основные параметры
+    params.append('format', document.getElementById('format_type').value);
+    if (document.getElementById('start_date').value) {
+        params.append('start_date', document.getElementById('start_date').value);
+    }
+    if (document.getElementById('end_date').value) {
+        params.append('end_date', document.getElementById('end_date').value);
+    }
+    
+    // Дополнительные фильтры в зависимости от типа данных
+    const dataType = document.getElementById('data_type').value;
+    
+    if (dataType === 'users') {
+        if (document.getElementById('user_status').value) {
+            params.append('status', document.getElementById('user_status').value);
+        }
+        if (document.getElementById('include_referrals').value !== 'all') {
+            params.append('referrals', document.getElementById('include_referrals').value);
+        }
+    } else if (dataType === 'subscriptions') {
+        if (document.getElementById('subscription_status').value) {
+            params.append('status', document.getElementById('subscription_status').value);
+        }
+        if (document.getElementById('channel_filter').value) {
+            params.append('channel_id', document.getElementById('channel_filter').value);
+        }
+    } else if (dataType === 'payments') {
+        if (document.getElementById('payment_status').value) {
+            params.append('status', document.getElementById('payment_status').value);
+        }
+        if (document.getElementById('payment_method').value) {
+            params.append('method', document.getElementById('payment_method').value);
+        }
+        if (document.getElementById('min_amount').value) {
+            params.append('min_amount', document.getElementById('min_amount').value);
+        }
+    }
+    
+    const progressModal = new bootstrap.Modal(document.getElementById('progressModal'));
+    progressModal.show();
+    
+    const url = `/api/export/${dataType}?${params.toString()}`;
+    
+    fetch(url)
+        .then(response => {
+            if (response.ok) {
+                return response.blob();
+            }
+            throw new Error('Ошибка экспорта');
+        })
+        .then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `${dataType}_${new Date().toISOString().split('T')[0]}.${document.getElementById('format_type').value}`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            
+            progressModal.hide();
+            showNotification('Экспорт успешно завершен', 'success');
+            loadExportHistory();
+        })
+        .catch(error => {
+            progressModal.hide();
+            showNotification('Ошибка экспорта: ' + error.message, 'error');
+        });
+}
+
+function resetForm() {
+    document.getElementById('exportForm').reset();
+    document.querySelectorAll('.filter-section').forEach(section => {
+        section.style.display = 'none';
+    });
+    
+    // Восстанавливаем даты по умолчанию
+    document.getElementById('end_date').valueAsDate = new Date();
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - 1);
+    document.getElementById('start_date').valueAsDate = startDate;
+}
+
+function loadExportHistory() {
+    fetch('/api/export/history')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('export-history');
+            let html = '';
+            
+            if (data.length === 0) {
+                html = '<p class="text-muted">История экспортов пуста</p>';
+            } else {
+                data.forEach(item => {
+                    const statusClass = item.status === 'completed' ? 'success' : 
+                                      item.status === 'failed' ? 'danger' : 'warning';
+                    
+                    html += `
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                            <div>
+                                <div class="fw-bold">${item.type}</div>
+                                <small class="text-muted">${item.created_at}</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-${statusClass}">${item.status}</span>
+                                ${item.download_url ? `<a href="${item.download_url}" class="btn btn-sm btn-outline-primary ms-1"><i class="fas fa-download"></i></a>` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            
+            container.innerHTML = html;
+        })
+        .catch(error => console.error('Ошибка загрузки истории:', error));
+}
+
+function loadChannels() {
+    fetch('/api/channels')
+        .then(response => response.json())
+        .then(data => {
+            const select = document.getElementById('channel_filter');
+            data.forEach(channel => {
+                const option = document.createElement('option');
+                option.value = channel.id;
+                option.textContent = channel.name;
+                select.appendChild(option);
+            });
+        })
+        .catch(error => console.error('Ошибка загрузки каналов:', error));
+}
+
+function showScheduleModal() {
+    const modal = new bootstrap.Modal(document.getElementById('scheduleModal'));
+    loadScheduledExports();
+    modal.show();
+}
+
+function saveSchedule() {
+    const formData = {
+        type: document.getElementById('schedule_type').value,
+        format: document.getElementById('schedule_format').value,
+        frequency: document.getElementById('schedule_frequency').value,
+        time: document.getElementById('schedule_time').value,
+        email: document.getElementById('schedule_email').value
+    };
+    
+    fetch('/api/export/schedule', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Расписание экспорта сохранено', 'success');
+            loadScheduledExports();
+        } else {
+            showNotification('Ошибка сохранения: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showNotification('Ошибка сохранения расписания', 'error');
+    });
+}
+
+function loadScheduledExports() {
+    fetch('/api/export/scheduled')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('scheduled-exports');
+            let html = '';
+            
+            if (data.length === 0) {
+                html = '<p class="text-muted">Нет запланированных экспортов</p>';
+            } else {
+                data.forEach(item => {
+                    html += `
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                            <div>
+                                <div class="fw-bold">${item.type} (${item.format})</div>
+                                <small class="text-muted">${item.frequency} в ${item.time}</small>
+                            </div>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteSchedule(${item.id})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    `;
+                });
+            }
+            
+            container.innerHTML = html;
+        })
+        .catch(error => console.error('Ошибка загрузки расписаний:', error));
+}
+
+function deleteSchedule(scheduleId) {
+    if (confirm('Удалить это расписание?')) {
+        fetch(`/api/export/schedule/${scheduleId}`, {method: 'DELETE'})
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Расписание удалено', 'success');
+                    loadScheduledExports();
+                } else {
+                    showNotification('Ошибка удаления: ' + data.message, 'error');
+                }
+            })
+            .catch(error => showNotification('Ошибка удаления расписания', 'error'));
+    }
+}
+</script>
+{% endblock %} 

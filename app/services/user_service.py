@@ -7,7 +7,9 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, and_
+from sqlalchemy import select, update, and_, or_
+from sqlalchemy.sql import func
+from sqlalchemy.types import String
 
 from app.database.models.user import User
 from app.database.models.subscription import Subscription
@@ -485,4 +487,82 @@ class UserService:
                 self.logger.info(f"Пользователь {action}", user_id=telegram_id)
                 return True
             
-            return False 
+            return False
+
+    async def get_users_paginated(self, limit: int = 20, offset: int = 0) -> List[User]:
+        """
+        Получение пользователей с пагинацией.
+        
+        Args:
+            limit: Количество записей
+            offset: Смещение
+            
+        Returns:
+            List[User]: Список пользователей
+        """
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(User)
+                .order_by(User.created_at.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+    async def search_users(self, search_query: str, limit: int = 20, offset: int = 0) -> List[User]:
+        """
+        Поиск пользователей по имени или username.
+        
+        Args:
+            search_query: Поисковый запрос
+            limit: Количество записей
+            offset: Смещение
+            
+        Returns:
+            List[User]: Список найденных пользователей
+        """
+        async with AsyncSessionLocal() as session:
+            search_pattern = f"%{search_query}%"
+            stmt = (
+                select(User)
+                .where(
+                    or_(
+                        User.username.ilike(search_pattern),
+                        User.first_name.ilike(search_pattern),
+                        User.last_name.ilike(search_pattern),
+                        User.telegram_id.cast(String).like(search_pattern)
+                    )
+                )
+                .order_by(User.created_at.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+    async def count_search_results(self, search_query: str) -> int:
+        """
+        Подсчет результатов поиска пользователей.
+        
+        Args:
+            search_query: Поисковый запрос
+            
+        Returns:
+            int: Количество найденных пользователей
+        """
+        async with AsyncSessionLocal() as session:
+            search_pattern = f"%{search_query}%"
+            stmt = (
+                select(func.count(User.id))
+                .where(
+                    or_(
+                        User.username.ilike(search_pattern),
+                        User.first_name.ilike(search_pattern),
+                        User.last_name.ilike(search_pattern),
+                        User.telegram_id.cast(String).like(search_pattern)
+                    )
+                )
+            )
+            result = await session.execute(stmt)
+            return result.scalar() or 0 

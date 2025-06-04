@@ -1,0 +1,407 @@
+{% extends "base.html" %}
+
+{% block title %}Аналитика - Админ Панель{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0 text-gray-800">Аналитика и отчеты</h1>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-primary" onclick="exportReport()">
+                        <i class="fas fa-file-pdf"></i> Экспорт отчета
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="location.reload()">
+                        <i class="fas fa-sync"></i> Обновить
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Сводная статистика -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Доходы за месяц</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="monthly-revenue">{{ analytics.monthly_revenue or 0 }} ₽</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-ruble-sign fa-2x text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Новые подписки</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="new-subscriptions">{{ analytics.new_subscriptions or 0 }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-user-plus fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Конверсия</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="conversion-rate">{{ analytics.conversion_rate or 0 }}%</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-percentage fa-2x text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Средний чек</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="avg-payment">{{ analytics.avg_payment or 0 }} ₽</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-coins fa-2x text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Графики -->
+    <div class="row mb-4">
+        <!-- График доходов -->
+        <div class="col-xl-8 col-lg-7">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Доходы по дням</h6>
+                    <div class="dropdown no-arrow">
+                        <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-ellipsis-v fa-sm fa-fw text-gray-400"></i>
+                        </a>
+                        <div class="dropdown-menu dropdown-menu-right shadow">
+                            <a class="dropdown-item" href="#" onclick="changeChartPeriod('7days')">7 дней</a>
+                            <a class="dropdown-item" href="#" onclick="changeChartPeriod('30days')">30 дней</a>
+                            <a class="dropdown-item" href="#" onclick="changeChartPeriod('3months')">3 месяца</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-area">
+                        <canvas id="revenueChart" width="100%" height="50"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Круговая диаграмма платежных систем -->
+        <div class="col-xl-4 col-lg-5">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Платежные системы</h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-pie pt-4 pb-2">
+                        <canvas id="paymentMethodsChart"></canvas>
+                    </div>
+                    <div class="mt-4 text-center small">
+                        <div id="payment-methods-legend"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Дополнительная аналитика -->
+    <div class="row">
+        <!-- Таблица топ каналов -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Популярные каналы</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="topChannelsTable">
+                            <thead>
+                                <tr>
+                                    <th>Канал</th>
+                                    <th>Подписчики</th>
+                                    <th>Доход</th>
+                                    <th>Рост</th>
+                                </tr>
+                            </thead>
+                            <tbody id="top-channels-data">
+                                <!-- Данные загружаются через AJAX -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- График активности пользователей -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Активность пользователей</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="userActivityChart" width="100%" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Детализированная статистика -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Детализированная статистика</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <div class="card border-left-primary h-100">
+                                <div class="card-body py-2">
+                                    <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Всего пользователей</div>
+                                    <div class="h6 mb-0 font-weight-bold text-gray-800">{{ analytics.total_users or 0 }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card border-left-success h-100">
+                                <div class="card-body py-2">
+                                    <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Активных подписок</div>
+                                    <div class="h6 mb-0 font-weight-bold text-gray-800">{{ analytics.active_subscriptions or 0 }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card border-left-warning h-100">
+                                <div class="card-body py-2">
+                                    <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Успешных платежей</div>
+                                    <div class="h6 mb-0 font-weight-bold text-gray-800">{{ analytics.successful_payments or 0 }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card border-left-danger h-100">
+                                <div class="card-body py-2">
+                                    <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Неудачных платежей</div>
+                                    <div class="h6 mb-0 font-weight-bold text-gray-800">{{ analytics.failed_payments or 0 }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let revenueChart, paymentMethodsChart, userActivityChart;
+
+// Инициализация графиков
+document.addEventListener('DOMContentLoaded', function() {
+    initializeCharts();
+    loadTopChannels();
+    
+    // Обновляем данные каждые 5 минут
+    setInterval(updateAnalytics, 300000);
+});
+
+function initializeCharts() {
+    // График доходов
+    const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+    revenueChart = new Chart(revenueCtx, {
+        type: 'line',
+        data: {
+            labels: {{ analytics.revenue_chart.labels | tojson }},
+            datasets: [{
+                label: 'Доходы (₽)',
+                data: {{ analytics.revenue_chart.data | tojson }},
+                borderColor: '#4e73df',
+                backgroundColor: 'rgba(78, 115, 223, 0.1)',
+                tension: 0.3,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                x: {
+                    grid: {
+                        display: false
+                    }
+                },
+                y: {
+                    ticks: {
+                        callback: function(value) {
+                            return value + ' ₽';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Круговая диаграмма платежных систем
+    const paymentCtx = document.getElementById('paymentMethodsChart').getContext('2d');
+    paymentMethodsChart = new Chart(paymentCtx, {
+        type: 'doughnut',
+        data: {
+            labels: {{ analytics.payment_methods_chart.labels | tojson }},
+            datasets: [{
+                data: {{ analytics.payment_methods_chart.data | tojson }},
+                backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b'],
+                hoverBorderColor: "rgba(234, 236, 244, 1)"
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+
+    // График активности пользователей
+    const activityCtx = document.getElementById('userActivityChart').getContext('2d');
+    userActivityChart = new Chart(activityCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ analytics.user_activity_chart.labels | tojson }},
+            datasets: [{
+                label: 'Активные пользователи',
+                data: {{ analytics.user_activity_chart.data | tojson }},
+                backgroundColor: '#1cc88a',
+                borderColor: '#17a673',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Создаем легенду для платежных систем
+    updatePaymentMethodsLegend();
+}
+
+function updatePaymentMethodsLegend() {
+    const legendContainer = document.getElementById('payment-methods-legend');
+    const labels = {{ analytics.payment_methods_chart.labels | tojson }};
+    const data = {{ analytics.payment_methods_chart.data | tojson }};
+    const colors = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b'];
+    
+    let legendHtml = '';
+    labels.forEach((label, index) => {
+        legendHtml += `
+            <span class="mr-2">
+                <i class="fas fa-circle" style="color: ${colors[index]}"></i>
+                ${label}: ${data[index]}
+            </span>
+        `;
+    });
+    legendContainer.innerHTML = legendHtml;
+}
+
+function loadTopChannels() {
+    fetch('/api/analytics/top-channels')
+        .then(response => response.json())
+        .then(data => {
+            const tbody = document.getElementById('top-channels-data');
+            let html = '';
+            
+            data.forEach(channel => {
+                const growthClass = channel.growth >= 0 ? 'text-success' : 'text-danger';
+                const growthIcon = channel.growth >= 0 ? 'fa-arrow-up' : 'fa-arrow-down';
+                
+                html += `
+                    <tr>
+                        <td>${channel.name}</td>
+                        <td>${channel.subscribers}</td>
+                        <td>${channel.revenue} ₽</td>
+                        <td class="${growthClass}">
+                            <i class="fas ${growthIcon}"></i> ${Math.abs(channel.growth)}%
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            tbody.innerHTML = html;
+        })
+        .catch(error => console.error('Ошибка загрузки топ каналов:', error));
+}
+
+function changeChartPeriod(period) {
+    fetch(`/api/analytics/revenue-chart?period=${period}`)
+        .then(response => response.json())
+        .then(data => {
+            revenueChart.data.labels = data.labels;
+            revenueChart.data.datasets[0].data = data.data;
+            revenueChart.update();
+        })
+        .catch(error => console.error('Ошибка обновления графика:', error));
+}
+
+function updateAnalytics() {
+    fetch('/api/analytics/stats')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('monthly-revenue').textContent = (data.monthly_revenue || 0) + ' ₽';
+            document.getElementById('new-subscriptions').textContent = data.new_subscriptions || 0;
+            document.getElementById('conversion-rate').textContent = (data.conversion_rate || 0) + '%';
+            document.getElementById('avg-payment').textContent = (data.avg_payment || 0) + ' ₽';
+        })
+        .catch(error => console.error('Ошибка обновления статистики:', error));
+}
+
+function exportReport() {
+    const format = prompt('Выберите формат отчета (pdf, excel):', 'pdf');
+    if (format && ['pdf', 'excel'].includes(format.toLowerCase())) {
+        window.location.href = `/api/analytics/export?format=${format.toLowerCase()}`;
+    }
+}
+</script>
+{% endblock %} 

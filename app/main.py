@@ -20,6 +20,7 @@ from app.config.settings import get_settings
 from app.config.database import init_database, close_database
 from app.utils.logger import setup_logging, get_logger
 from app.bot.handlers import start, payments, subscription, admin, referral, promo
+from app.bot.handlers.admin.export import export_router
 from app.tasks.subscription_tasks import start_background_tasks, stop_background_tasks
 
 # Глобальная переменная для логгера
@@ -63,6 +64,7 @@ async def create_dispatcher() -> Dispatcher:
     dp.include_router(payments.router)  # Обработчики платежей
     dp.include_router(referral.referral_router)  # Реферальная система
     dp.include_router(promo.promo_router)  # Система промокодов
+    dp.include_router(export_router)  # Экспорт данных
     dp.include_router(admin.admin_router)  # Админ-панель
     
     return dp

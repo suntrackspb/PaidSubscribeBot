@@ -8,7 +8,8 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, and_, or_
+from sqlalchemy import select, update, and_, or_, func
+from sqlalchemy.orm import selectinload
 
 from app.database.models.user import User
 from app.database.models.subscription import Subscription, SubscriptionStatus
@@ -511,4 +512,134 @@ class SubscriptionService:
             payments = list(result.scalars().all())
             
             total_revenue = sum(float(payment.amount) for payment in payments)
-            return total_revenue 
+            return total_revenue
+
+    async def get_subscriptions_paginated(
+        self, 
+        limit: int = 20, 
+        offset: int = 0,
+        status_filter: Optional[str] = None
+    ) -> List[Subscription]:
+        """
+        Получение подписок с пагинацией и фильтрацией.
+        
+        Args:
+            limit: Количество записей
+            offset: Смещение
+            status_filter: Фильтр по статусу (active, expired, cancelled)
+            
+        Returns:
+            List[Subscription]: Список подписок
+        """
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(Subscription)
+                .options(
+                    # Подгружаем связанные объекты
+                    selectinload(Subscription.user),
+                    selectinload(Subscription.channel)
+                )
+                .order_by(Subscription.created_at.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+            
+            # Применяем фильтр по статусу
+            if status_filter == 'active':
+                stmt = stmt.where(
+                    and_(
+                        Subscription.is_active == True,
+                        or_(
+                            Subscription.expires_at.is_(None),
+                            Subscription.expires_at > datetime.utcnow()
+                        )
+                    )
+                )
+            elif status_filter == 'expired':
+                stmt = stmt.where(
+                    and_(
+                        Subscription.expires_at.is_not(None),
+                        Subscription.expires_at <= datetime.utcnow()
+                    )
+                )
+            elif status_filter == 'cancelled':
+                stmt = stmt.where(Subscription.status == SubscriptionStatus.CANCELLED)
+            
+            result = await session.execute(stmt)
+            subscriptions = result.scalars().all()
+            
+            return list(subscriptions)
+    
+    async def get_subscriptions_count(self, status_filter: Optional[str] = None) -> int:
+        """
+        Получение общего количества подписок с учетом фильтра.
+        
+        Args:
+            status_filter: Фильтр по статусу
+            
+        Returns:
+            int: Количество подписок
+        """
+        async with AsyncSessionLocal() as session:
+            stmt = select(func.count(Subscription.id))
+            
+            # Применяем фильтр по статусу
+            if status_filter == 'active':
+                stmt = stmt.where(
+                    and_(
+                        Subscription.is_active == True,
+                        or_(
+                            Subscription.expires_at.is_(None),
+                            Subscription.expires_at > datetime.utcnow()
+                        )
+                    )
+                )
+            elif status_filter == 'expired':
+                stmt = stmt.where(
+                    and_(
+                        Subscription.expires_at.is_not(None),
+                        Subscription.expires_at <= datetime.utcnow()
+                    )
+                )
+            elif status_filter == 'cancelled':
+                stmt = stmt.where(Subscription.status == SubscriptionStatus.CANCELLED)
+            
+            result = await session.execute(stmt)
+            count = result.scalar()
+            
+            return count or 0
+
+    async def delete_subscription(self, subscription_id: int) -> bool:
+        """
+        Удаление подписки.
+        
+        Args:
+            subscription_id: ID подписки
+            
+        Returns:
+            bool: True если подписка удалена
+        """
+        async with AsyncSessionLocal() as session:
+            try:
+                stmt = select(Subscription).where(Subscription.id == subscription_id)
+                result = await session.execute(stmt)
+                subscription = result.scalar_one_or_none()
+                
+                if not subscription:
+                    self.logger.error("Подписка не найдена", subscription_id=subscription_id)
+                    return False
+                
+                await session.delete(subscription)
+                await session.commit()
+                
+                self.logger.info(
+                    "Подписка удалена",
+                    subscription_id=subscription_id,
+                    user_id=subscription.user_id
+                )
+                
+                return True
+            except Exception as e:
+                self.logger.error("Ошибка удаления подписки", error=str(e))
+                await session.rollback()
+                return False 

@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+
+{% block title %}Дашборд - PaidBot Admin Panel{% endblock %}
+
+{% block page_title %}Дашборд{% endblock %}
+
+{% block content %}
+<!-- Статистические карточки -->
+<div class="row mb-4">
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Всего пользователей
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold" id="total-users">
+                            {{ stats.users.total or 0 }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-people fa-2x text-white-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stat-card-success">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Активные пользователи
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold" id="active-users">
+                            {{ stats.users.active or 0 }}
+                        </div>
+                        <small class="text-white-50">за последние 7 дней</small>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-person-check fa-2x text-white-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stat-card-info">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Активные подписки
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold" id="active-subscriptions">
+                            {{ stats.subscriptions.active or 0 }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-card-checklist fa-2x text-white-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stat-card-warning">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Доход за месяц
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold" id="revenue-month">
+                            {{ "%.0f"|format(stats.revenue.month or 0) }} ₽
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-currency-dollar fa-2x text-white-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Дополнительная статистика -->
+<div class="row mb-4">
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="bi bi-graph-up"></i>
+                    Статистика за сегодня
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-6">
+                        <div class="text-center">
+                            <div class="h4 font-weight-bold text-primary" id="new-users">
+                                {{ stats.users.new_today or 0 }}
+                            </div>
+                            <div class="text-muted">Новых пользователей</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-center">
+                            <div class="h4 font-weight-bold text-success" id="revenue-today">
+                                {{ "%.0f"|format(stats.revenue.today or 0) }} ₽
+                            </div>
+                            <div class="text-muted">Доход</div>
+                        </div>
+                    </div>
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-12">
+                        <div class="text-center">
+                            <div class="h4 font-weight-bold text-info">
+                                {{ stats.revenue.payments_today or 0 }}
+                            </div>
+                            <div class="text-muted">Успешных платежей</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="bi bi-clock-history"></i>
+                    Последняя активность
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <div class="timeline-marker bg-success"></div>
+                        <div class="timeline-content">
+                            <h6 class="timeline-title">Система запущена</h6>
+                            <p class="timeline-text">{{ current_time.strftime('%d.%m.%Y %H:%M') }}</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-marker bg-info"></div>
+                        <div class="timeline-content">
+                            <h6 class="timeline-title">Последнее обновление</h6>
+                            <p class="timeline-text">Автоматическое обновление каждые 30 секунд</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Быстрые действия -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="bi bi-lightning"></i>
+                    Быстрые действия
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <a href="/users" class="btn btn-outline-primary btn-custom w-100">
+                            <i class="bi bi-people"></i>
+                            Управление пользователями
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <a href="/subscriptions" class="btn btn-outline-success btn-custom w-100">
+                            <i class="bi bi-card-list"></i>
+                            Просмотр подписок
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <a href="/analytics" class="btn btn-outline-info btn-custom w-100">
+                            <i class="bi bi-graph-up"></i>
+                            Аналитика
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <a href="/export" class="btn btn-outline-warning btn-custom w-100">
+                            <i class="bi bi-download"></i>
+                            Экспорт данных
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Системная информация -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="bi bi-info-circle"></i>
+                    Системная информация
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="table table-borderless">
+                            <tr>
+                                <td><strong>Версия системы:</strong></td>
+                                <td>1.7.0</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Время работы:</strong></td>
+                                <td id="uptime">Рассчитывается...</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Статус бота:</strong></td>
+                                <td><span class="status-badge status-active">Активен</span></td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table table-borderless">
+                            <tr>
+                                <td><strong>База данных:</strong></td>
+                                <td><span class="status-badge status-active">Подключена</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Платежные системы:</strong></td>
+                                <td><span class="status-badge status-active">Работают</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Последний бэкап:</strong></td>
+                                <td>Не создан</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .timeline {
+        position: relative;
+        padding-left: 30px;
+    }
+    
+    .timeline-item {
+        position: relative;
+        margin-bottom: 20px;
+    }
+    
+    .timeline-marker {
+        position: absolute;
+        left: -35px;
+        top: 5px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+    }
+    
+    .timeline-title {
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 5px;
+    }
+    
+    .timeline-text {
+        font-size: 12px;
+        color: #6c757d;
+        margin: 0;
+    }
+    
+    .timeline::before {
+        content: '';
+        position: absolute;
+        left: -30px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #e9ecef;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Обновление времени работы
+    function updateUptime() {
+        const startTime = new Date('{{ current_time.isoformat() }}');
+        const now = new Date();
+        const diff = now - startTime;
+        
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        
+        document.getElementById('uptime').textContent = `${hours}ч ${minutes}м`;
+    }
+    
+    // Обновляем каждую минуту
+    setInterval(updateUptime, 60000);
+    updateUptime();
+    
+    // Анимация счетчиков при загрузке
+    document.addEventListener('DOMContentLoaded', function() {
+        const counters = document.querySelectorAll('.h5, .h4');
+        
+        counters.forEach(counter => {
+            const target = parseInt(counter.textContent.replace(/[^\d]/g, ''));
+            if (target > 0) {
+                animateCounter(counter, target);
+            }
+        });
+    });
+    
+    function animateCounter(element, target) {
+        let current = 0;
+        const increment = target / 50;
+        const timer = setInterval(() => {
+            current += increment;
+            if (current >= target) {
+                current = target;
+                clearInterval(timer);
+            }
+            
+            const text = element.textContent;
+            const newText = text.replace(/\d+/, Math.floor(current));
+            element.textContent = newText;
+        }, 20);
+    }
+</script>
+{% endblock %} 

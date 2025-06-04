@@ -220,9 +220,10 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast"),
-            InlineKeyboardButton(text="⚙️ Настройки", callback_data="admin_settings"),
+            InlineKeyboardButton(text="📤 Экспорт данных", callback_data="admin_export"),
         ],
         [
+            InlineKeyboardButton(text="⚙️ Настройки", callback_data="admin_settings"),
             InlineKeyboardButton(text="🔙 Выйти из админки", callback_data="exit_admin")
         ]
     ])

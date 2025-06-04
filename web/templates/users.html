@@ -1,0 +1,394 @@
+{% extends "base.html" %}
+
+{% block title %}Пользователи - PaidBot Admin Panel{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-people"></i> Управление пользователями</h2>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary btn-custom" onclick="refreshUsers()">
+            <i class="bi bi-arrow-clockwise"></i> Обновить
+        </button>
+        <button class="btn btn-success btn-custom" onclick="exportUsers()">
+            <i class="bi bi-download"></i> Экспорт
+        </button>
+    </div>
+</div>
+
+<!-- Поиск и фильтры -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-6">
+                <label for="search" class="form-label">Поиск пользователей</label>
+                <input type="text" class="form-control" id="search" name="search" 
+                       value="{{ search }}" placeholder="Имя, username или Telegram ID">
+            </div>
+            <div class="col-md-3">
+                <label for="limit" class="form-label">Показать на странице</label>
+                <select class="form-select" id="limit" name="limit">
+                    <option value="10" {% if limit == 10 %}selected{% endif %}>10</option>
+                    <option value="20" {% if limit == 20 %}selected{% endif %}>20</option>
+                    <option value="50" {% if limit == 50 %}selected{% endif %}>50</option>
+                    <option value="100" {% if limit == 100 %}selected{% endif %}>100</option>
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary btn-custom me-2">
+                    <i class="bi bi-search"></i> Найти
+                </button>
+                <a href="/users" class="btn btn-outline-secondary btn-custom">
+                    <i class="bi bi-x-circle"></i> Сбросить
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Статистика -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body text-center">
+                <h3 class="mb-0">{{ total_users }}</h3>
+                <p class="mb-0">Всего пользователей</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card-success">
+            <div class="card-body text-center">
+                <h3 class="mb-0">{{ users|selectattr("is_active")|list|length }}</h3>
+                <p class="mb-0">Активных</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card-warning">
+            <div class="card-body text-center">
+                <h3 class="mb-0">{{ users|selectattr("is_admin")|list|length }}</h3>
+                <p class="mb-0">Администраторов</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card-info">
+            <div class="card-body text-center">
+                <h3 class="mb-0">{{ users|rejectattr("is_active")|list|length }}</h3>
+                <p class="mb-0">Заблокированных</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Таблица пользователей -->
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Пользователь</th>
+                        <th>Telegram ID</th>
+                        <th>Статус</th>
+                        <th>Подписка</th>
+                        <th>Регистрация</th>
+                        <th>Последняя активность</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.id }}</td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="user-avatar me-2">
+                                    {{ user.first_name[0] if user.first_name else 'U' }}
+                                </div>
+                                <div>
+                                    <div class="fw-bold">
+                                        {{ user.first_name or '' }} {{ user.last_name or '' }}
+                                    </div>
+                                    <small class="text-muted">@{{ user.username or 'Нет username' }}</small>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <code>{{ user.telegram_id }}</code>
+                        </td>
+                        <td>
+                            {% if user.is_admin %}
+                                <span class="status-badge" style="background-color: #e7f3ff; color: #0066cc;">
+                                    <i class="bi bi-shield-check"></i> Админ
+                                </span>
+                            {% elif user.is_active %}
+                                <span class="status-badge status-active">
+                                    <i class="bi bi-check-circle"></i> Активен
+                                </span>
+                            {% else %}
+                                <span class="status-badge status-inactive">
+                                    <i class="bi bi-x-circle"></i> Заблокирован
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.subscriptions %}
+                                {% set active_sub = user.subscriptions|selectattr("is_active")|first %}
+                                {% if active_sub %}
+                                    <span class="status-badge status-active">
+                                        <i class="bi bi-check-circle"></i> Активна
+                                    </span>
+                                    <br>
+                                    <small class="text-muted">
+                                        до {{ active_sub.expires_at.strftime('%d.%m.%Y') if active_sub.expires_at }}
+                                    </small>
+                                {% else %}
+                                    <span class="status-badge status-expired">
+                                        <i class="bi bi-clock"></i> Истекла
+                                    </span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">Нет подписки</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small>{{ user.created_at.strftime('%d.%m.%Y %H:%M') if user.created_at else 'Неизвестно' }}</small>
+                        </td>
+                        <td>
+                            <small>{{ user.last_activity.strftime('%d.%m.%Y %H:%M') if user.last_activity else 'Никогда' }}</small>
+                        </td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm btn-outline-primary" 
+                                        onclick="viewUser({{ user.id }})" title="Просмотр">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                {% if not user.is_admin %}
+                                <button type="button" class="btn btn-sm btn-outline-warning" 
+                                        onclick="toggleUserBan({{ user.id }}, {{ user.is_active|lower }})" 
+                                        title="{{ 'Разблокировать' if not user.is_active else 'Заблокировать' }}">
+                                    <i class="bi bi-{{ 'unlock' if not user.is_active else 'lock' }}"></i>
+                                </button>
+                                {% endif %}
+                                <button type="button" class="btn btn-sm btn-outline-info" 
+                                        onclick="sendMessage({{ user.id }})" title="Отправить сообщение">
+                                    <i class="bi bi-chat"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Пагинация -->
+        {% if total_pages > 1 %}
+        <nav aria-label="Навигация по страницам">
+            <ul class="pagination justify-content-center">
+                {% if current_page > 1 %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ current_page - 1 }}&limit={{ limit }}&search={{ search }}">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                </li>
+                {% endif %}
+
+                {% for page_num in range(1, total_pages + 1) %}
+                    {% if page_num == current_page %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ page_num }}</span>
+                    </li>
+                    {% elif page_num <= 3 or page_num > total_pages - 3 or (page_num >= current_page - 2 and page_num <= current_page + 2) %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_num }}&limit={{ limit }}&search={{ search }}">{{ page_num }}</a>
+                    </li>
+                    {% elif page_num == 4 or page_num == total_pages - 3 %}
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                    {% endif %}
+                {% endfor %}
+
+                {% if current_page < total_pages %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ current_page + 1 }}&limit={{ limit }}&search={{ search }}">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Модальные окна -->
+<div class="modal fade" id="userModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Информация о пользователе</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="userModalBody">
+                <!-- Содержимое загружается динамически -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="messageModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Отправить сообщение</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="messageForm">
+                    <div class="mb-3">
+                        <label for="messageText" class="form-label">Текст сообщения</label>
+                        <textarea class="form-control" id="messageText" rows="4" required></textarea>
+                    </div>
+                    <input type="hidden" id="messageUserId">
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="sendUserMessage()">Отправить</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function refreshUsers() {
+    window.location.reload();
+}
+
+function exportUsers() {
+    window.open('/api/export/users?format=csv', '_blank');
+}
+
+function viewUser(userId) {
+    // Загружаем информацию о пользователе
+    fetch(`/api/users/${userId}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('userModalBody').innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Основная информация</h6>
+                        <p><strong>ID:</strong> ${data.id}</p>
+                        <p><strong>Telegram ID:</strong> ${data.telegram_id}</p>
+                        <p><strong>Имя:</strong> ${data.first_name || 'Не указано'}</p>
+                        <p><strong>Фамилия:</strong> ${data.last_name || 'Не указано'}</p>
+                        <p><strong>Username:</strong> @${data.username || 'Не указан'}</p>
+                        <p><strong>Статус:</strong> ${data.is_active ? 'Активен' : 'Заблокирован'}</p>
+                        <p><strong>Администратор:</strong> ${data.is_admin ? 'Да' : 'Нет'}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Активность</h6>
+                        <p><strong>Регистрация:</strong> ${new Date(data.created_at).toLocaleString('ru-RU')}</p>
+                        <p><strong>Последняя активность:</strong> ${data.last_activity ? new Date(data.last_activity).toLocaleString('ru-RU') : 'Никогда'}</p>
+                        <p><strong>Всего платежей:</strong> ${data.payments_count || 0}</p>
+                        <p><strong>Сумма платежей:</strong> ${data.total_spent || 0} ₽</p>
+                    </div>
+                </div>
+            `;
+            new bootstrap.Modal(document.getElementById('userModal')).show();
+        })
+        .catch(error => {
+            console.error('Ошибка загрузки данных пользователя:', error);
+            showAlert('Ошибка загрузки данных пользователя', 'danger');
+        });
+}
+
+function toggleUserBan(userId, isActive) {
+    const action = isActive ? 'заблокировать' : 'разблокировать';
+    
+    if (!confirm(`Вы уверены, что хотите ${action} этого пользователя?`)) {
+        return;
+    }
+    
+    fetch(`/api/users/${userId}/toggle-ban`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(`Пользователь успешно ${isActive ? 'заблокирован' : 'разблокирован'}`, 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showAlert('Ошибка при изменении статуса пользователя', 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        showAlert('Ошибка при изменении статуса пользователя', 'danger');
+    });
+}
+
+function sendMessage(userId) {
+    document.getElementById('messageUserId').value = userId;
+    new bootstrap.Modal(document.getElementById('messageModal')).show();
+}
+
+function sendUserMessage() {
+    const userId = document.getElementById('messageUserId').value;
+    const messageText = document.getElementById('messageText').value;
+    
+    if (!messageText.trim()) {
+        showAlert('Введите текст сообщения', 'warning');
+        return;
+    }
+    
+    fetch(`/api/users/${userId}/send-message`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            message: messageText
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Сообщение отправлено', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('messageModal')).hide();
+            document.getElementById('messageText').value = '';
+        } else {
+            showAlert('Ошибка отправки сообщения', 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        showAlert('Ошибка отправки сообщения', 'danger');
+    });
+}
+
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(alertDiv);
+    
+    setTimeout(() => {
+        alertDiv.remove();
+    }, 5000);
+}
+</script>
+{% endblock %} 

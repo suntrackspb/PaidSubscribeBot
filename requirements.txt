@@ -63,4 +63,9 @@ orjson==3.9.12
 colorlog==6.8.0
 
 # Веб-интерфейс
-jinja2==3.1.2 
+jinja2==3.1.2
+
+# Экспорт данных
+pandas==2.1.4
+openpyxl==3.1.2
+xlsxwriter==3.1.9 
