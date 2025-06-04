@@ -205,7 +205,7 @@
 
 1. **Клонирование репозитория**
 ```bash
-git clone https://github.com/yourusername/PaidSubscribeBot.git
+git clone https://github.com/suntrackspb/PaidSubscribeBot.git
 cd PaidSubscribeBot
 ```
 
@@ -331,13 +331,13 @@ SBP_QR_SIZE=300
 
 ```bash
 # Запуск интеграционных тестов
-python test_subscription_integration.py
+python3 test_subscription_integration.py
 
 # Тестирование импортов
-python test_services_import.py
+python3 test_services_import.py
 
 # Тестирование с покрытием (будет добавлено в этапе 8)
-python -m pytest --cov=app
+python3 -m pytest --cov=app
 ```
 
 ## 📚 Структура проекта
@@ -381,7 +381,7 @@ PaidSubscribeBot/
 ## 🆘 Поддержка
 
 - **Документация**: [Ссылка на вики]
-- **Issues**: [GitHub Issues](https://github.com/yourusername/PaidSubscribeBot/issues)
+- **Issues**: [GitHub Issues](https://github.com/suntrackspb/PaidSubscribeBot/issues)
 - **Telegram**: @your_support_username
 
 ---
