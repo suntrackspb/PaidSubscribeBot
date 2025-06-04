@@ -11,7 +11,7 @@ from sqlalchemy import select, and_, or_, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.database.models import User, Subscription, Payment, Channel, PromoCode, Notification, ReferralCode
+from app.database.models import User, Subscription, Payment, Channel, PromoCode, Notification, Referral
 from app.config.database import AsyncSessionLocal
 from app.utils.logger import get_logger
 

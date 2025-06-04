@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, desc, func
 from sqlalchemy.orm import selectinload
 
-from app.database.connection import get_async_session
+from app.config.database import get_async_session
 from app.database.models.promo import PromoCode, PromoCodeUsage, PromoCodeSettings, PromoCodeType
 from app.database.models.user import User
 from app.database.models.payment import Payment

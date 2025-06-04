@@ -12,7 +12,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 
-from app.database.base import Base
+from app.config.database import Base
 
 
 class PromoCodeType(enum.Enum):

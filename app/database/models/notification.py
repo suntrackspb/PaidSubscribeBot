@@ -11,7 +11,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Foreign
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from app.database.base import Base
+from app.config.database import Base
 
 
 class NotificationType(str, Enum):
@@ -139,7 +139,7 @@ class Notification(Base):
     error_message = Column(Text, nullable=True, comment="Сообщение об ошибке")
     
     # Дополнительные данные
-    metadata = Column(JSON, nullable=True, comment="Дополнительные данные уведомления")
+    extra_data = Column(JSON, nullable=True, comment="Дополнительные данные уведомления")
     
     # Системные поля
     created_at = Column(DateTime, default=func.now(), nullable=False)
@@ -175,10 +175,10 @@ class Notification(Base):
         self.sent_at = datetime.utcnow()
         self.updated_at = datetime.utcnow()
         
-        if telegram_message_id and self.metadata:
-            self.metadata["telegram_message_id"] = telegram_message_id
+        if telegram_message_id and self.extra_data:
+            self.extra_data["telegram_message_id"] = telegram_message_id
         elif telegram_message_id:
-            self.metadata = {"telegram_message_id": telegram_message_id}
+            self.extra_data = {"telegram_message_id": telegram_message_id}
 
     def mark_delivered(self):
         """Отметить уведомление как доставленное"""

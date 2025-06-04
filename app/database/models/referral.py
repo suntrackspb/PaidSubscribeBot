@@ -10,7 +10,7 @@ from decimal import Decimal
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Numeric, Text
 from sqlalchemy.orm import relationship, Mapped
 
-from app.database.base import Base
+from app.config.database import Base
 
 
 class Referral(Base):

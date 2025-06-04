@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, desc, func, update
 from sqlalchemy.orm import selectinload
 
-from app.database.connection import get_async_session
+from app.config.database import get_async_session
 from app.database.models.notification import (
     Notification, NotificationTemplate, NotificationSettings, BroadcastCampaign,
     NotificationType, NotificationStatus, NotificationPriority

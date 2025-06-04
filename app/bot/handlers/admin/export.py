@@ -8,8 +8,8 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from app.bot.middlewares.auth import AdminRequiredMiddleware
-from app.bot.utils.texts import AdminTexts
+from app.bot.middlewares.auth import AdminMiddleware
+from app.bot.utils.texts import Messages
 from app.services.export_service import export_service
 from app.utils.logger import get_logger
 
@@ -17,8 +17,8 @@ logger = get_logger(__name__)
 
 # Создаем роутер для экспорта
 export_router = Router()
-export_router.message.middleware(AdminRequiredMiddleware())
-export_router.callback_query.middleware(AdminRequiredMiddleware())
+export_router.message.middleware(AdminMiddleware())
+export_router.callback_query.middleware(AdminMiddleware())
 
 class ExportStates(StatesGroup):
     """Состояния для экспорта данных"""
@@ -89,7 +89,7 @@ async def admin_export_menu(callback: CallbackQuery, state: FSMContext):
     """Главное меню экспорта данных"""
     await state.clear()
     
-    text = AdminTexts.EXPORT_MENU
+    text = Messages.EXPORT_MENU
     await callback.message.edit_text(
         text=text,
         reply_markup=get_export_main_keyboard()
@@ -392,7 +392,7 @@ async def export_command(message: Message, state: FSMContext):
     """Команда для быстрого доступа к экспорту"""
     await state.clear()
     
-    text = AdminTexts.EXPORT_MENU
+    text = Messages.EXPORT_MENU
     await message.answer(
         text=text,
         reply_markup=get_export_main_keyboard()

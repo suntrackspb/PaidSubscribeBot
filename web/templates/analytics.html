@@ -4,6 +4,16 @@
 
 {% block content %}
 <div class="container-fluid">
+    <!-- Скрытые элементы для передачи данных в JavaScript -->
+    <div id="analytics-data" style="display: none;"
+         data-revenue-labels="{{ analytics.revenue_chart.labels | tojson | e }}"
+         data-revenue-data="{{ analytics.revenue_chart.data | tojson | e }}"
+         data-payment-labels="{{ analytics.payment_methods_chart.labels | tojson | e }}"
+         data-payment-data="{{ analytics.payment_methods_chart.data | tojson | e }}"
+         data-activity-labels="{{ analytics.user_activity_chart.labels | tojson | e }}"
+         data-activity-data="{{ analytics.user_activity_chart.data | tojson | e }}">
+    </div>
+
     <div class="row">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-4">
@@ -220,9 +230,11 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 let revenueChart, paymentMethodsChart, userActivityChart;
+let analyticsData = {};
 
 // Инициализация графиков
 document.addEventListener('DOMContentLoaded', function() {
+    loadAnalyticsData();
     initializeCharts();
     loadTopChannels();
     
@@ -230,16 +242,42 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(updateAnalytics, 300000);
 });
 
+function loadAnalyticsData() {
+    const dataElement = document.getElementById('analytics-data');
+    if (dataElement) {
+        try {
+            analyticsData = {
+                revenueLabels: JSON.parse(dataElement.dataset.revenueLabels || '[]'),
+                revenueData: JSON.parse(dataElement.dataset.revenueData || '[]'),
+                paymentLabels: JSON.parse(dataElement.dataset.paymentLabels || '[]'),
+                paymentData: JSON.parse(dataElement.dataset.paymentData || '[]'),
+                activityLabels: JSON.parse(dataElement.dataset.activityLabels || '[]'),
+                activityData: JSON.parse(dataElement.dataset.activityData || '[]')
+            };
+        } catch (e) {
+            console.error('Ошибка загрузки данных аналитики:', e);
+            analyticsData = {
+                revenueLabels: [],
+                revenueData: [],
+                paymentLabels: [],
+                paymentData: [],
+                activityLabels: [],
+                activityData: []
+            };
+        }
+    }
+}
+
 function initializeCharts() {
     // График доходов
     const revenueCtx = document.getElementById('revenueChart').getContext('2d');
     revenueChart = new Chart(revenueCtx, {
         type: 'line',
         data: {
-            labels: {{ analytics.revenue_chart.labels | tojson }},
+            labels: analyticsData.revenueLabels,
             datasets: [{
                 label: 'Доходы (₽)',
-                data: {{ analytics.revenue_chart.data | tojson }},
+                data: analyticsData.revenueData,
                 borderColor: '#4e73df',
                 backgroundColor: 'rgba(78, 115, 223, 0.1)',
                 tension: 0.3,
@@ -276,9 +314,9 @@ function initializeCharts() {
     paymentMethodsChart = new Chart(paymentCtx, {
         type: 'doughnut',
         data: {
-            labels: {{ analytics.payment_methods_chart.labels | tojson }},
+            labels: analyticsData.paymentLabels,
             datasets: [{
-                data: {{ analytics.payment_methods_chart.data | tojson }},
+                data: analyticsData.paymentData,
                 backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b'],
                 hoverBorderColor: "rgba(234, 236, 244, 1)"
             }]
@@ -299,10 +337,10 @@ function initializeCharts() {
     userActivityChart = new Chart(activityCtx, {
         type: 'bar',
         data: {
-            labels: {{ analytics.user_activity_chart.labels | tojson }},
+            labels: analyticsData.activityLabels,
             datasets: [{
                 label: 'Активные пользователи',
-                data: {{ analytics.user_activity_chart.data | tojson }},
+                data: analyticsData.activityData,
                 backgroundColor: '#1cc88a',
                 borderColor: '#17a673',
                 borderWidth: 1
@@ -330,8 +368,8 @@ function initializeCharts() {
 
 function updatePaymentMethodsLegend() {
     const legendContainer = document.getElementById('payment-methods-legend');
-    const labels = {{ analytics.payment_methods_chart.labels | tojson }};
-    const data = {{ analytics.payment_methods_chart.data | tojson }};
+    const labels = analyticsData.paymentLabels;
+    const data = analyticsData.paymentData;
     const colors = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b'];
     
     let legendHtml = '';
