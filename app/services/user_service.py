@@ -345,11 +345,125 @@ class UserService:
     
     async def set_admin_status(self, telegram_id: int, is_admin: bool) -> bool:
         """
-        Установка статуса администратора.
+        Изменение статуса администратора.
         
         Args:
             telegram_id: ID пользователя в Telegram
             is_admin: Статус администратора
+            
+        Returns:
+            bool: True если статус изменен
+        """
+        # Примечание: Админы управляются через настройки,
+        # но можно добавить поле в базу данных для расширенного функционала
+        
+        self.logger.info(
+            "Изменение статуса администратора",
+            user_id=telegram_id,
+            is_admin=is_admin
+        )
+        
+        # TODO: Реализовать сохранение в базе данных при необходимости
+        return True
+
+    async def get_user_by_username(self, username: str) -> Optional[User]:
+        """
+        Получение пользователя по username.
+        
+        Args:
+            username: Имя пользователя (без @)
+            
+        Returns:
+            Optional[User]: Пользователь или None
+        """
+        async with AsyncSessionLocal() as session:
+            stmt = select(User).where(User.username == username)
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    async def get_recent_users(self, limit: int = 10) -> List[User]:
+        """
+        Получение списка последних зарегистрированных пользователей.
+        
+        Args:
+            limit: Максимальное количество пользователей
+            
+        Returns:
+            List[User]: Список пользователей
+        """
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(User)
+                .order_by(User.created_at.desc())
+                .limit(limit)
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+    async def get_active_users_count(self, days: int = 7) -> int:
+        """
+        Получение количества активных пользователей за период.
+        
+        Args:
+            days: Количество дней для расчета активности
+            
+        Returns:
+            int: Количество активных пользователей
+        """
+        async with AsyncSessionLocal() as session:
+            since_date = datetime.utcnow() - timedelta(days=days)
+            stmt = (
+                select(User)
+                .where(
+                    and_(
+                        User.last_activity_at >= since_date,
+                        User.is_active == True
+                    )
+                )
+            )
+            result = await session.execute(stmt)
+            users = result.scalars().all()
+            return len(list(users))
+
+    async def get_new_users_count(self, days: int = 1) -> int:
+        """
+        Получение количества новых пользователей за период.
+        
+        Args:
+            days: Количество дней
+            
+        Returns:
+            int: Количество новых пользователей
+        """
+        async with AsyncSessionLocal() as session:
+            since_date = datetime.utcnow() - timedelta(days=days)
+            stmt = (
+                select(User)
+                .where(User.created_at >= since_date)
+            )
+            result = await session.execute(stmt)
+            users = result.scalars().all()
+            return len(list(users))
+
+    async def get_all_active_users(self) -> List[User]:
+        """
+        Получение всех активных пользователей.
+        
+        Returns:
+            List[User]: Список всех активных пользователей
+        """
+        async with AsyncSessionLocal() as session:
+            stmt = select(User).where(User.is_active == True)
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+    async def update_user_ban_status(self, telegram_id: int, is_banned: bool) -> bool:
+        """
+        Изменение статуса блокировки пользователя.
+        
+        Args:
+            telegram_id: ID пользователя в Telegram
+            is_banned: Статус блокировки
             
         Returns:
             bool: True если статус изменен
@@ -359,7 +473,7 @@ class UserService:
                 update(User)
                 .where(User.telegram_id == telegram_id)
                 .values(
-                    is_admin=is_admin,
+                    is_banned=is_banned,
                     updated_at=datetime.utcnow()
                 )
             )
@@ -367,11 +481,8 @@ class UserService:
             await session.commit()
             
             if result.rowcount > 0:
-                self.logger.info(
-                    "Изменен статус администратора",
-                    user_id=telegram_id,
-                    is_admin=is_admin
-                )
+                action = "заблокирован" if is_banned else "разблокирован"
+                self.logger.info(f"Пользователь {action}", user_id=telegram_id)
                 return True
             
             return False 

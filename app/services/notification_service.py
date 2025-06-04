@@ -450,10 +450,10 @@ class NotificationService:
     
     async def send_welcome_message(self, user: User) -> bool:
         """
-        Приветственное сообщение для нового пользователя.
+        Отправка приветственного сообщения новому пользователю.
         
         Args:
-            user: Пользователь
+            user: Новый пользователь
             
         Returns:
             bool: True если сообщение отправлено
@@ -464,19 +464,18 @@ class NotificationService:
         
         try:
             text = (
-                f"👋 Добро пожаловать, {user.first_name or 'пользователь'}!\n\n"
-                "🤖 Я бот для управления подписками на закрытые каналы.\n\n"
-                "📋 Что я умею:\n"
-                "• Оформление подписок\n"
-                "• Обработка платежей\n"
-                "• Управление доступом к каналам\n"
-                "• Уведомления о статусе подписки\n\n"
-                "Используйте /help для получения списка команд."
+                f"👋 <b>Добро пожаловать, {user.first_name or 'пользователь'}!</b>\n\n"
+                "Вы успешно зарегистрировались в нашем боте.\n\n"
+                "🔹 Используйте /help для получения справки\n"
+                "🔹 Команда /subscription для управления подписками\n"
+                "🔹 Команда /support для связи с поддержкой\n\n"
+                "Начните с оформления подписки на наш закрытый канал!"
             )
             
+            # Создаем клавиатуру
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="💳 Оформить подписку", callback_data="new_subscription")],
-                [InlineKeyboardButton(text="ℹ️ Помощь", callback_data="help")]
+                [InlineKeyboardButton(text="📖 Справка", callback_data="help")]
             ])
             
             await self.bot.send_message(
@@ -499,4 +498,162 @@ class NotificationService:
                 user_id=user.telegram_id,
                 error=str(e)
             )
+            return False
+
+    async def broadcast_message(
+        self,
+        message: str,
+        admin_id: int,
+        parse_mode: str = "HTML",
+        keyboard: Optional[InlineKeyboardMarkup] = None
+    ) -> Dict[str, int]:
+        """
+        Массовая рассылка сообщения всем активным пользователям.
+        
+        Args:
+            message: Текст сообщения для рассылки
+            admin_id: ID администратора, инициировавшего рассылку
+            parse_mode: Режим парсинга текста
+            keyboard: Клавиатура (опционально)
+            
+        Returns:
+            Dict[str, int]: Статистика рассылки
+        """
+        if not self.bot:
+            self.logger.error("Bot не инициализирован")
+            return {"sent": 0, "failed": 0, "blocked": 0}
+        
+        from app.services.user_service import UserService
+        
+        user_service = UserService()
+        
+        try:
+            # Получаем всех активных пользователей
+            users = await user_service.get_all_active_users()
+            
+            if not users:
+                self.logger.warning("Нет активных пользователей для рассылки")
+                return {"sent": 0, "failed": 0, "blocked": 0}
+            
+            self.logger.info(
+                "Начинается массовая рассылка",
+                admin_id=admin_id,
+                total_users=len(users),
+                message_length=len(message)
+            )
+            
+            sent_count = 0
+            failed_count = 0
+            blocked_count = 0
+            
+            # Отправляем сообщения пакетами по 30 пользователей с задержкой
+            batch_size = 30
+            delay_between_batches = 1  # секунда между пакетами
+            
+            for i in range(0, len(users), batch_size):
+                batch = users[i:i + batch_size]
+                
+                # Отправляем сообщения в пакете
+                tasks = []
+                for user in batch:
+                    if user.telegram_id != admin_id:  # Не отправляем админу
+                        task = self._send_broadcast_message_to_user(
+                            user.telegram_id, message, parse_mode, keyboard
+                        )
+                        tasks.append((user.telegram_id, task))
+                
+                # Ожидаем выполнения всех задач в пакете
+                results = await asyncio.gather(
+                    *[task for _, task in tasks],
+                    return_exceptions=True
+                )
+                
+                # Обрабатываем результаты
+                for (user_id, _), result in zip(tasks, results):
+                    if isinstance(result, Exception):
+                        if isinstance(result, TelegramForbiddenError):
+                            blocked_count += 1
+                            self.logger.debug(f"Пользователь {user_id} заблокировал бота")
+                        else:
+                            failed_count += 1
+                            self.logger.warning(f"Ошибка отправки пользователю {user_id}: {result}")
+                    elif result:
+                        sent_count += 1
+                    else:
+                        failed_count += 1
+                
+                # Задержка между пакетами для соблюдения лимитов Telegram
+                if i + batch_size < len(users):
+                    await asyncio.sleep(delay_between_batches)
+            
+            stats = {
+                "sent": sent_count,
+                "failed": failed_count,
+                "blocked": blocked_count
+            }
+            
+            self.logger.info(
+                "Массовая рассылка завершена",
+                admin_id=admin_id,
+                stats=stats
+            )
+            
+            # Отправляем отчет администратору
+            report_text = (
+                "📊 <b>Отчет о рассылке</b>\n\n"
+                f"✅ Отправлено: <b>{sent_count}</b>\n"
+                f"❌ Не доставлено: <b>{failed_count}</b>\n"
+                f"🚫 Заблокировали бота: <b>{blocked_count}</b>\n\n"
+                f"📝 Общий охват: <b>{sent_count}/{len(users)} ({round(sent_count/len(users)*100, 1)}%)</b>"
+            )
+            
+            try:
+                await self.bot.send_message(
+                    chat_id=admin_id,
+                    text=report_text,
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                self.logger.error(f"Не удалось отправить отчет админу: {e}")
+            
+            return stats
+            
+        except Exception as e:
+            self.logger.error(f"Ошибка массовой рассылки: {e}", exc_info=True)
+            return {"sent": 0, "failed": 0, "blocked": 0}
+
+    async def _send_broadcast_message_to_user(
+        self,
+        user_id: int,
+        message: str,
+        parse_mode: str = "HTML",
+        keyboard: Optional[InlineKeyboardMarkup] = None
+    ) -> bool:
+        """
+        Отправка сообщения конкретному пользователю (вспомогательный метод).
+        
+        Args:
+            user_id: ID пользователя
+            message: Текст сообщения
+            parse_mode: Режим парсинга
+            keyboard: Клавиатура
+            
+        Returns:
+            bool: True если сообщение отправлено
+        """
+        try:
+            await self.bot.send_message(
+                chat_id=user_id,
+                text=message,
+                parse_mode=parse_mode,
+                reply_markup=keyboard
+            )
+            return True
+            
+        except TelegramForbiddenError:
+            # Пользователь заблокировал бота
+            raise
+        except Exception as e:
+            # Другие ошибки
+            self.logger.debug(f"Ошибка отправки сообщения пользователю {user_id}: {e}")
             return False 

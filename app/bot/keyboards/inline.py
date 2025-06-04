@@ -21,6 +21,10 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="📋 Моя подписка", callback_data="my_subscription"),
         ],
         [
+            InlineKeyboardButton(text="🎯 Реферальная программа", callback_data="referral_menu"),
+            InlineKeyboardButton(text="🎟️ Промокоды", callback_data="promo_menu"),
+        ],
+        [
             InlineKeyboardButton(text="📖 Справка", callback_data="help"),
             InlineKeyboardButton(text="🆘 Поддержка", callback_data="support"),
         ]
@@ -209,6 +213,10 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text="💳 Платежи", callback_data="admin_payments"),
             InlineKeyboardButton(text="📋 Подписки", callback_data="admin_subscriptions"),
+        ],
+        [
+            InlineKeyboardButton(text="🎯 Рефералы", callback_data="admin_referrals"),
+            InlineKeyboardButton(text="🎟️ Промокоды", callback_data="admin_promo"),
         ],
         [
             InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast"),

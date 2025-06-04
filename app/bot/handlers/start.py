@@ -12,11 +12,16 @@ from app.bot.keyboards.inline import main_menu_keyboard, back_button
 from app.bot.utils.texts import Messages
 from app.config.settings import get_settings
 from app.utils.logger import get_logger, log_user_action
+from app.services.user_service import UserService
+from app.bot.handlers.referral import process_referral_start
 
 # Создаем роутер для обработчиков
 router = Router()
 logger = get_logger("handlers.start")
 settings = get_settings()
+
+# Инициализируем сервисы
+user_service = UserService()
 
 
 @router.message(CommandStart())
@@ -48,6 +53,21 @@ async def start_command(message: Message, state: FSMContext) -> None:
         if settings.maintenance_mode and user.id not in settings.admin_ids:
             await message.answer(settings.maintenance_message)
             return
+        
+        # Создаем или обновляем пользователя в базе данных
+        await user_service.create_or_update_user(
+            telegram_id=user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            language_code=user.language_code
+        )
+        
+        # Обрабатываем реферальный код, если есть
+        command_args = message.text.split()[1:] if len(message.text.split()) > 1 else []
+        if command_args:
+            referral_code = command_args[0]
+            await process_referral_start(user.id, referral_code)
         
         # Отправляем приветственное сообщение
         await message.answer(
@@ -218,6 +238,39 @@ async def support_callback(callback: CallbackQuery) -> None:
     except Exception as e:
         logger.error(
             "Ошибка в обработчике support callback",
+            user_id=user.id,
+            error=str(e),
+            exc_info=True
+        )
+        await callback.answer("Произошла ошибка")
+
+
+@router.callback_query(F.data == "main_menu")
+async def main_menu_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    """
+    Обработчик кнопки "Главное меню".
+    """
+    user = callback.from_user
+    
+    log_user_action(
+        user_id=user.id,
+        action="main_menu"
+    )
+    
+    # Очищаем состояние FSM
+    await state.clear()
+    
+    try:
+        await callback.message.edit_text(
+            Messages.START_MESSAGE,
+            reply_markup=main_menu_keyboard(),
+            parse_mode="HTML"
+        )
+        await callback.answer()
+        
+    except Exception as e:
+        logger.error(
+            "Ошибка в обработчике main_menu",
             user_id=user.id,
             error=str(e),
             exc_info=True

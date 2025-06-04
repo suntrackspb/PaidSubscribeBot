@@ -38,7 +38,7 @@ class Payment(Base):
     
     Attributes:
         id: Уникальный ID платежа
-        user_id: ID пользователя (FK)
+        user_id: ID пользователя (FK to users.telegram_id)
         subscription_id: ID подписки (FK, опционально)
         external_id: ID платежа в внешней системе
         method: Метод оплаты
@@ -58,7 +58,7 @@ class Payment(Base):
     __tablename__ = "payments"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.telegram_id"), nullable=False, index=True)
     subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=True, index=True)
     
     # Данные платежа
@@ -86,7 +86,8 @@ class Payment(Base):
     
     # Связи с другими таблицами
     user = relationship("User", back_populates="payments")
-    subscription = relationship("Subscription", back_populates="payments")
+    subscription = relationship("Subscription", back_populates="payment")
+    promo_code_usage = relationship("PromoCodeUsage", back_populates="payment", uselist=False)
     
     def __repr__(self) -> str:
         return f"<Payment(id={self.id}, user_id={self.user_id}, amount={self.amount}, status={self.status})>"

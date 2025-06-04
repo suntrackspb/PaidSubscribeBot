@@ -362,54 +362,153 @@ class SubscriptionService:
     
     async def get_subscription_stats(self, channel_id: Optional[int] = None) -> Dict[str, Any]:
         """
-        Получение статистики по подпискам.
+        Получение статистики подписок.
         
         Args:
             channel_id: ID канала (опционально)
             
         Returns:
-            Dict[str, Any]: Статистика
+            Dict[str, Any]: Статистика подписок
         """
         async with AsyncSessionLocal() as session:
-            base_stmt = select(Subscription)
+            base_query = select(Subscription)
             
             if channel_id:
-                base_stmt = base_stmt.where(Subscription.channel_id == channel_id)
+                base_query = base_query.where(Subscription.channel_id == channel_id)
             
             # Общее количество подписок
-            total_stmt = base_stmt
-            total_result = await session.execute(total_stmt)
-            total_count = len(total_result.scalars().all())
+            total_result = await session.execute(base_query)
+            total_subscriptions = len(list(total_result.scalars().all()))
             
             # Активные подписки
-            active_stmt = base_stmt.where(
+            active_query = base_query.where(
                 and_(
                     Subscription.is_active == True,
                     Subscription.expires_at > datetime.utcnow()
                 )
             )
-            active_result = await session.execute(active_stmt)
-            active_count = len(active_result.scalars().all())
+            active_result = await session.execute(active_query)
+            active_subscriptions = len(list(active_result.scalars().all()))
             
             # Истекшие подписки
-            expired_stmt = base_stmt.where(
-                and_(
-                    Subscription.is_active == True,
+            expired_query = base_query.where(
+                or_(
+                    Subscription.is_active == False,
                     Subscription.expires_at <= datetime.utcnow()
                 )
             )
-            expired_result = await session.execute(expired_stmt)
-            expired_count = len(expired_result.scalars().all())
+            expired_result = await session.execute(expired_query)
+            expired_subscriptions = len(list(expired_result.scalars().all()))
             
-            # Отмененные подписки
-            cancelled_stmt = base_stmt.where(Subscription.status == SubscriptionStatus.CANCELLED)
-            cancelled_result = await session.execute(cancelled_stmt)
-            cancelled_count = len(cancelled_result.scalars().all())
+            # Подписки, истекающие в ближайшие 7 дней
+            soon_expire_date = datetime.utcnow() + timedelta(days=7)
+            expiring_query = base_query.where(
+                and_(
+                    Subscription.is_active == True,
+                    Subscription.expires_at <= soon_expire_date,
+                    Subscription.expires_at > datetime.utcnow()
+                )
+            )
+            expiring_result = await session.execute(expiring_query)
+            expiring_subscriptions = len(list(expiring_result.scalars().all()))
             
             return {
-                "total": total_count,
-                "active": active_count,
-                "expired": expired_count,
-                "cancelled": cancelled_count,
-                "channel_id": channel_id
-            } 
+                "total": total_subscriptions,
+                "active": active_subscriptions,
+                "expired": expired_subscriptions,
+                "expiring_soon": expiring_subscriptions
+            }
+
+    async def get_active_subscriptions_count(self) -> int:
+        """
+        Получение количества активных подписок.
+        
+        Returns:
+            int: Количество активных подписок
+        """
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(Subscription)
+                .where(
+                    and_(
+                        Subscription.is_active == True,
+                        Subscription.expires_at > datetime.utcnow()
+                    )
+                )
+            )
+            result = await session.execute(stmt)
+            subscriptions = result.scalars().all()
+            return len(list(subscriptions))
+
+    async def get_expired_subscriptions_count(self) -> int:
+        """
+        Получение количества истекших подписок.
+        
+        Returns:
+            int: Количество истекших подписок
+        """
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(Subscription)
+                .where(
+                    or_(
+                        Subscription.is_active == False,
+                        Subscription.expires_at <= datetime.utcnow()
+                    )
+                )
+            )
+            result = await session.execute(stmt)
+            subscriptions = result.scalars().all()
+            return len(list(subscriptions))
+
+    async def get_payments_count(self, days: int = 30) -> int:
+        """
+        Получение количества платежей за период.
+        
+        Args:
+            days: Количество дней
+            
+        Returns:
+            int: Количество платежей
+        """
+        async with AsyncSessionLocal() as session:
+            since_date = datetime.utcnow() - timedelta(days=days)
+            stmt = (
+                select(Payment)
+                .where(
+                    and_(
+                        Payment.status == PaymentStatus.COMPLETED,
+                        Payment.created_at >= since_date
+                    )
+                )
+            )
+            result = await session.execute(stmt)
+            payments = result.scalars().all()
+            return len(list(payments))
+
+    async def get_revenue(self, days: int = 30) -> float:
+        """
+        Получение общей выручки за период.
+        
+        Args:
+            days: Количество дней
+            
+        Returns:
+            float: Сумма выручки
+        """
+        async with AsyncSessionLocal() as session:
+            since_date = datetime.utcnow() - timedelta(days=days)
+            stmt = (
+                select(Payment)
+                .where(
+                    and_(
+                        Payment.status == PaymentStatus.COMPLETED,
+                        Payment.created_at >= since_date
+                    )
+                )
+            )
+            result = await session.execute(stmt)
+            payments = list(result.scalars().all())
+            
+            total_revenue = sum(float(payment.amount) for payment in payments)
+            return total_revenue 

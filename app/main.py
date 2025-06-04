@@ -19,13 +19,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.config.settings import get_settings
 from app.config.database import init_database, close_database
 from app.utils.logger import setup_logging, get_logger
-from app.bot.handlers import start
-from app.bot.handlers import payments
-from app.bot.handlers import subscription  # Добавляем обработчик подписок
-from app.tasks import start_background_tasks, stop_background_tasks  # Добавляем задачи
+from app.bot.handlers import start, payments, subscription, admin, referral, promo
+from app.tasks.subscription_tasks import start_background_tasks, stop_background_tasks
 
-# Инициализируем логгер
-logger = get_logger(__name__)
+# Глобальная переменная для логгера
+logger = None
 
 async def create_bot() -> Bot:
     """
@@ -63,6 +61,9 @@ async def create_dispatcher() -> Dispatcher:
     dp.include_router(start.router)
     dp.include_router(subscription.subscription_router)  # Обработчики подписок
     dp.include_router(payments.router)  # Обработчики платежей
+    dp.include_router(referral.referral_router)  # Реферальная система
+    dp.include_router(promo.promo_router)  # Система промокодов
+    dp.include_router(admin.admin_router)  # Админ-панель
     
     return dp
 
@@ -81,6 +82,7 @@ async def setup_bot_commands(bot: Bot) -> None:
         BotCommand(command="help", description="📖 Справка"),
         BotCommand(command="subscription", description="📋 Управление подписками"),
         BotCommand(command="pay", description="💳 Оплатить подписку"),
+        BotCommand(command="referral", description="🎯 Реферальная программа"),
         BotCommand(command="support", description="🆘 Поддержка"),
     ]
     
@@ -103,6 +105,7 @@ async def setup_admin_commands(bot: Bot) -> None:
         BotCommand(command="help", description="📖 Справка"),
         BotCommand(command="subscription", description="📋 Управление подписками"),
         BotCommand(command="pay", description="💳 Оплатить подписку"),
+        BotCommand(command="referral", description="🎯 Реферальная программа"),
         BotCommand(command="support", description="🆘 Поддержка"),
         BotCommand(command="admin", description="👑 Панель администратора"),
         BotCommand(command="stats", description="📊 Статистика"),
