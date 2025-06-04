@@ -1,659 +1,638 @@
 """
-Сервис уведомлений для PaidSubscribeBot.
-Управляет отправкой уведомлений пользователям и администраторам.
+Сервис для управления уведомлениями.
+Расширенная система уведомлений с шаблонами, планированием и настройками пользователей.
 """
 
 import asyncio
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from datetime import datetime, timedelta
-from enum import Enum
+from decimal import Decimal
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message
+from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_, or_, desc, func, update
+from sqlalchemy.orm import selectinload
 
+from app.database.connection import get_async_session
+from app.database.models.notification import (
+    Notification, NotificationTemplate, NotificationSettings, BroadcastCampaign,
+    NotificationType, NotificationStatus, NotificationPriority
+)
 from app.database.models.user import User
 from app.database.models.subscription import Subscription
-from app.database.models.payment import Payment
-from app.config.settings import get_settings
 from app.utils.logger import get_logger
+from app.config.settings import get_settings
 
-
-class NotificationType(Enum):
-    """Типы уведомлений"""
-    SUBSCRIPTION_EXPIRING = "subscription_expiring"
-    SUBSCRIPTION_EXPIRED = "subscription_expired"
-    PAYMENT_SUCCESS = "payment_success"
-    PAYMENT_FAILED = "payment_failed"
-    NEW_USER = "new_user"
-    ADMIN_ALERT = "admin_alert"
+logger = get_logger("services.notification")
 
 
 class NotificationService:
-    """
-    Сервис для отправки уведомлений.
-    
-    Обеспечивает:
-    - Отправку уведомлений пользователям
-    - Уведомления администраторов
-    - Массовые рассылки
-    - Шаблоны сообщений
-    """
-    
+    """Сервис для работы с уведомлениями"""
+
     def __init__(self, bot: Optional[Bot] = None):
-        self.logger = get_logger("services.notification")
         self.bot = bot
+        self.logger = logger
         self.settings = get_settings()
-    
-    async def send_subscription_expiring_notification(
+
+    async def _get_session(self) -> AsyncSession:
+        """Получение сессии базы данных"""
+        async for session in get_async_session():
+            return session
+
+    # Управление шаблонами
+    async def create_template(
         self,
-        user: User,
-        subscription: Subscription,
-        days_left: int
-    ) -> bool:
-        """
-        Уведомление о скором истечении подписки.
-        
-        Args:
-            user: Пользователь
-            subscription: Подписка
-            days_left: Дней до истечения
-            
-        Returns:
-            bool: True если уведомление отправлено
-        """
-        if not self.bot:
-            self.logger.error("Bot не инициализирован")
-            return False
-        
-        try:
-            # Формируем текст сообщения
-            if days_left == 1:
-                text = (
-                    "⚠️ <b>Ваша подписка истекает завтра!</b>\n\n"
-                    f"Подписка на канал истекает: <b>{subscription.expires_at.strftime('%d.%m.%Y')}</b>\n\n"
-                    "Продлите подписку, чтобы не потерять доступ к каналу."
-                )
-            else:
-                text = (
-                    f"⚠️ <b>Ваша подписка истекает через {days_left} дней</b>\n\n"
-                    f"Подписка на канал истекает: <b>{subscription.expires_at.strftime('%d.%m.%Y')}</b>\n\n"
-                    "Рекомендуем продлить подписку заранее."
-                )
-            
-            # Создаем клавиатуру
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="💳 Продлить подписку", callback_data=f"renew_{subscription.id}")],
-                [InlineKeyboardButton(text="ℹ️ Информация о подписке", callback_data=f"sub_info_{subscription.id}")]
-            ])
-            
-            await self.bot.send_message(
-                chat_id=user.telegram_id,
-                text=text,
-                parse_mode="HTML",
-                reply_markup=keyboard
-            )
-            
-            self.logger.info(
-                "Отправлено уведомление об истечении подписки",
-                user_id=user.telegram_id,
-                subscription_id=subscription.id,
-                days_left=days_left
-            )
-            
-            return True
-            
-        except (TelegramBadRequest, TelegramForbiddenError) as e:
-            self.logger.error(
-                "Ошибка отправки уведомления об истечении подписки",
-                user_id=user.telegram_id,
-                error=str(e)
-            )
-            return False
-    
-    async def send_subscription_expired_notification(
-        self,
-        user: User,
-        subscription: Subscription
-    ) -> bool:
-        """
-        Уведомление об истечении подписки.
-        
-        Args:
-            user: Пользователь
-            subscription: Подписка
-            
-        Returns:
-            bool: True если уведомление отправлено
-        """
-        if not self.bot:
-            self.logger.error("Bot не инициализирован")
-            return False
-        
-        try:
-            text = (
-                "❌ <b>Ваша подписка истекла</b>\n\n"
-                f"Подписка на канал истекла: <b>{subscription.expires_at.strftime('%d.%m.%Y')}</b>\n\n"
-                "Доступ к каналу приостановлен. Вы можете оформить новую подписку в любое время."
-            )
-            
-            # Создаем клавиатуру
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="💳 Оформить новую подписку", callback_data="new_subscription")],
-                [InlineKeyboardButton(text="📞 Связаться с поддержкой", callback_data="support")]
-            ])
-            
-            await self.bot.send_message(
-                chat_id=user.telegram_id,
-                text=text,
-                parse_mode="HTML",
-                reply_markup=keyboard
-            )
-            
-            self.logger.info(
-                "Отправлено уведомление об истечении подписки",
-                user_id=user.telegram_id,
-                subscription_id=subscription.id
-            )
-            
-            return True
-            
-        except (TelegramBadRequest, TelegramForbiddenError) as e:
-            self.logger.error(
-                "Ошибка отправки уведомления об истечении подписки",
-                user_id=user.telegram_id,
-                error=str(e)
-            )
-            return False
-    
-    async def send_payment_success_notification(
-        self,
-        user: User,
-        payment: Payment,
-        subscription: Optional[Subscription] = None
-    ) -> bool:
-        """
-        Уведомление об успешной оплате.
-        
-        Args:
-            user: Пользователь
-            payment: Платеж
-            subscription: Подписка (если создана)
-            
-        Returns:
-            bool: True если уведомление отправлено
-        """
-        if not self.bot:
-            self.logger.error("Bot не инициализирован")
-            return False
-        
-        try:
-            text = (
-                "✅ <b>Платеж успешно обработан!</b>\n\n"
-                f"💰 Сумма: <b>{payment.amount} {payment.currency}</b>\n"
-                f"📅 Дата: <b>{payment.created_at.strftime('%d.%m.%Y %H:%M')}</b>\n"
-                f"🆔 ID платежа: <code>{payment.external_id}</code>\n\n"
-            )
-            
-            if subscription:
-                text += (
-                    f"🎉 <b>Подписка активирована!</b>\n"
-                    f"📅 Действует до: <b>{subscription.expires_at.strftime('%d.%m.%Y')}</b>\n\n"
-                    "Теперь у вас есть доступ к каналу."
-                )
-                
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="📱 Перейти в канал", url="https://t.me/your_channel")],
-                    [InlineKeyboardButton(text="ℹ️ Информация о подписке", callback_data=f"sub_info_{subscription.id}")]
-                ])
-            else:
-                text += "Спасибо за оплату!"
-                keyboard = None
-            
-            await self.bot.send_message(
-                chat_id=user.telegram_id,
-                text=text,
-                parse_mode="HTML",
-                reply_markup=keyboard
-            )
-            
-            self.logger.info(
-                "Отправлено уведомление об успешной оплате",
-                user_id=user.telegram_id,
-                payment_id=payment.id
-            )
-            
-            return True
-            
-        except (TelegramBadRequest, TelegramForbiddenError) as e:
-            self.logger.error(
-                "Ошибка отправки уведомления об успешной оплате",
-                user_id=user.telegram_id,
-                error=str(e)
-            )
-            return False
-    
-    async def send_payment_failed_notification(
-        self,
-        user: User,
-        payment: Payment,
-        reason: str = "Неизвестная ошибка"
-    ) -> bool:
-        """
-        Уведомление о неудачной оплате.
-        
-        Args:
-            user: Пользователь
-            payment: Платеж
-            reason: Причина неудачи
-            
-        Returns:
-            bool: True если уведомление отправлено
-        """
-        if not self.bot:
-            self.logger.error("Bot не инициализирован")
-            return False
-        
-        try:
-            text = (
-                "❌ <b>Ошибка при обработке платежа</b>\n\n"
-                f"💰 Сумма: <b>{payment.amount} {payment.currency}</b>\n"
-                f"📅 Дата: <b>{payment.created_at.strftime('%d.%m.%Y %H:%M')}</b>\n"
-                f"🆔 ID платежа: <code>{payment.external_id}</code>\n"
-                f"❗ Причина: <b>{reason}</b>\n\n"
-                "Попробуйте оплатить еще раз или обратитесь в поддержку."
-            )
-            
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔄 Попробовать снова", callback_data="retry_payment")],
-                [InlineKeyboardButton(text="📞 Связаться с поддержкой", callback_data="support")]
-            ])
-            
-            await self.bot.send_message(
-                chat_id=user.telegram_id,
-                text=text,
-                parse_mode="HTML",
-                reply_markup=keyboard
-            )
-            
-            self.logger.info(
-                "Отправлено уведомление о неудачной оплате",
-                user_id=user.telegram_id,
-                payment_id=payment.id,
-                reason=reason
-            )
-            
-            return True
-            
-        except (TelegramBadRequest, TelegramForbiddenError) as e:
-            self.logger.error(
-                "Ошибка отправки уведомления о неудачной оплате",
-                user_id=user.telegram_id,
-                error=str(e)
-            )
-            return False
-    
-    async def send_admin_notification(
-        self,
+        name: str,
+        type: NotificationType,
         message: str,
-        notification_type: NotificationType = NotificationType.ADMIN_ALERT,
-        data: Optional[Dict[str, Any]] = None
-    ) -> int:
-        """
-        Отправка уведомления администраторам.
-        
-        Args:
-            message: Текст сообщения
-            notification_type: Тип уведомления
-            data: Дополнительные данные
+        title: Optional[str] = None,
+        priority: NotificationPriority = NotificationPriority.NORMAL,
+        delay_seconds: int = 0,
+        retry_count: int = 3,
+        conditions: Optional[Dict[str, Any]] = None,
+        created_by: Optional[int] = None
+    ) -> NotificationTemplate:
+        """Создание шаблона уведомления"""
+        async with await self._get_session() as session:
+            template = NotificationTemplate(
+                name=name,
+                type=type,
+                title=title,
+                message=message,
+                priority=priority,
+                delay_seconds=delay_seconds,
+                retry_count=retry_count,
+                conditions=conditions,
+                created_by=str(created_by) if created_by else None
+            )
             
-        Returns:
-            int: Количество отправленных уведомлений
-        """
+            session.add(template)
+            await session.commit()
+            await session.refresh(template)
+            
+            self.logger.info(
+                "Создан шаблон уведомления",
+                template_id=template.id,
+                name=name,
+                type=type.value,
+                created_by=created_by
+            )
+            
+            return template
+
+    async def get_template(self, template_id: int) -> Optional[NotificationTemplate]:
+        """Получение шаблона по ID"""
+        async with await self._get_session() as session:
+            query = select(NotificationTemplate).where(NotificationTemplate.id == template_id)
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
+    async def get_templates_by_type(self, type: NotificationType) -> List[NotificationTemplate]:
+        """Получение шаблонов по типу"""
+        async with await self._get_session() as session:
+            query = select(NotificationTemplate).where(
+                and_(
+                    NotificationTemplate.type == type,
+                    NotificationTemplate.is_active == True
+                )
+            ).order_by(NotificationTemplate.created_at)
+            
+            result = await session.execute(query)
+            return result.scalars().all()
+
+    # Создание уведомлений
+    async def create_notification(
+        self,
+        user_telegram_id: int,
+        type: NotificationType,
+        message: str,
+        title: Optional[str] = None,
+        priority: NotificationPriority = NotificationPriority.NORMAL,
+        scheduled_at: Optional[datetime] = None,
+        template_id: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Notification:
+        """Создание уведомления"""
+        async with await self._get_session() as session:
+            notification = Notification(
+                user_telegram_id=str(user_telegram_id),
+                template_id=template_id,
+                type=type,
+                priority=priority,
+                title=title,
+                message=message,
+                scheduled_at=scheduled_at,
+                metadata=metadata
+            )
+            
+            session.add(notification)
+            await session.commit()
+            await session.refresh(notification)
+            
+            self.logger.info(
+                "Создано уведомление",
+                notification_id=notification.id,
+                user_id=user_telegram_id,
+                type=type.value,
+                scheduled=scheduled_at is not None
+            )
+            
+            return notification
+
+    async def create_notification_from_template(
+        self,
+        user_telegram_id: int,
+        template_id: int,
+        variables: Optional[Dict[str, Any]] = None,
+        scheduled_at: Optional[datetime] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[Notification]:
+        """Создание уведомления на основе шаблона"""
+        template = await self.get_template(template_id)
+        if not template or not template.is_active:
+            return None
+        
+        # Рендерим сообщение с переменными
+        message = template.render_message(variables or {})
+        
+        # Применяем задержку из шаблона
+        if scheduled_at is None and template.delay_seconds > 0:
+            scheduled_at = datetime.utcnow() + timedelta(seconds=template.delay_seconds)
+        
+        return await self.create_notification(
+            user_telegram_id=user_telegram_id,
+            type=template.type,
+            message=message,
+            title=template.title,
+            priority=template.priority,
+            scheduled_at=scheduled_at,
+            template_id=template_id,
+            metadata=metadata
+        )
+
+    # Отправка уведомлений
+    async def send_notification(self, notification_id: int) -> bool:
+        """Отправка уведомления"""
         if not self.bot:
-            self.logger.error("Bot не инициализирован")
-            return 0
+            self.logger.warning("Bot не инициализирован для отправки уведомлений")
+            return False
         
-        admin_ids = getattr(self.settings, 'ADMIN_IDS', [])
-        if not admin_ids:
-            self.logger.warning("Список администраторов пуст")
-            return 0
-        
-        sent_count = 0
-        
-        # Формируем полный текст сообщения
-        full_message = f"🔔 <b>Уведомление администратора</b>\n\n{message}"
-        
-        if data:
-            full_message += "\n\n📊 <b>Дополнительная информация:</b>\n"
-            for key, value in data.items():
-                full_message += f"• {key}: <code>{value}</code>\n"
-        
-        full_message += f"\n⏰ Время: {datetime.utcnow().strftime('%d.%m.%Y %H:%M:%S')} UTC"
-        
-        for admin_id in admin_ids:
+        async with await self._get_session() as session:
+            # Получаем уведомление с пользователем
+            query = select(Notification).options(
+                selectinload(Notification.user)
+            ).where(Notification.id == notification_id)
+            
+            result = await session.execute(query)
+            notification = result.scalar_one_or_none()
+            
+            if not notification:
+                return False
+            
+            # Проверяем настройки пользователя
+            settings = await self.get_user_settings(int(notification.user_telegram_id))
+            if settings and not settings.is_type_enabled(notification.type):
+                notification.cancel()
+                await session.commit()
+                self.logger.info(
+                    "Уведомление отменено - отключено в настройках",
+                    notification_id=notification_id,
+                    user_id=notification.user_telegram_id
+                )
+                return False
+            
+            # Проверяем тихие часы
+            if settings and settings.is_quiet_time(datetime.utcnow().hour):
+                # Переносим на время после тихих часов
+                if settings.quiet_hours_end:
+                    tomorrow = datetime.utcnow().replace(hour=settings.quiet_hours_end, minute=0, second=0, microsecond=0)
+                    if tomorrow <= datetime.utcnow():
+                        tomorrow += timedelta(days=1)
+                    notification.scheduled_at = tomorrow
+                    await session.commit()
+                    self.logger.info(
+                        "Уведомление перенесено из-за тихих часов",
+                        notification_id=notification_id,
+                        new_time=tomorrow
+                    )
+                    return False
+            
             try:
-                await self.bot.send_message(
-                    chat_id=admin_id,
-                    text=full_message,
+                # Отправляем сообщение
+                message = await self.bot.send_message(
+                    chat_id=int(notification.user_telegram_id),
+                    text=notification.message,
                     parse_mode="HTML"
                 )
-                sent_count += 1
                 
-            except (TelegramBadRequest, TelegramForbiddenError) as e:
+                # Отмечаем как отправленное
+                notification.mark_sent(message.message_id)
+                await session.commit()
+                
+                self.logger.info(
+                    "Уведомление отправлено",
+                    notification_id=notification_id,
+                    user_id=notification.user_telegram_id,
+                    message_id=message.message_id
+                )
+                
+                return True
+                
+            except TelegramForbiddenError:
+                # Пользователь заблокировал бота
+                notification.mark_failed("Пользователь заблокировал бота")
+                await session.commit()
+                
+                self.logger.warning(
+                    "Пользователь заблокировал бота",
+                    user_id=notification.user_telegram_id
+                )
+                
+                return False
+                
+            except TelegramBadRequest as e:
+                # Ошибка Telegram API
+                notification.mark_failed(f"Ошибка Telegram API: {str(e)}")
+                await session.commit()
+                
                 self.logger.error(
-                    "Ошибка отправки уведомления администратору",
-                    admin_id=admin_id,
+                    "Ошибка отправки уведомления",
+                    notification_id=notification_id,
                     error=str(e)
                 )
-        
-        self.logger.info(
-            "Отправлены уведомления администраторам",
-            sent_count=sent_count,
-            total_admins=len(admin_ids),
-            type=notification_type.value
-        )
-        
-        return sent_count
-    
-    async def send_new_user_notification(self, user: User) -> bool:
-        """
-        Уведомление о новом пользователе.
-        
-        Args:
-            user: Новый пользователь
-            
-        Returns:
-            bool: True если уведомление отправлено
-        """
-        message = (
-            f"👤 Новый пользователь зарегистрирован!\n\n"
-            f"ID: {user.telegram_id}\n"
-            f"Имя: {user.first_name or 'Не указано'}\n"
-            f"Username: @{user.username or 'Не указан'}\n"
-            f"Язык: {user.language_code or 'Не указан'}"
-        )
-        
-        data = {
-            "user_id": user.telegram_id,
-            "username": user.username,
-            "registration_date": user.created_at.isoformat() if user.created_at else None
-        }
-        
-        sent_count = await self.send_admin_notification(
-            message=message,
-            notification_type=NotificationType.NEW_USER,
-            data=data
-        )
-        
-        return sent_count > 0
-    
-    async def send_bulk_notification(
-        self,
-        user_ids: List[int],
-        message: str,
-        parse_mode: str = "HTML",
-        keyboard: Optional[InlineKeyboardMarkup] = None
-    ) -> Dict[str, int]:
-        """
-        Массовая рассылка уведомлений.
-        
-        Args:
-            user_ids: Список ID пользователей
-            message: Текст сообщения
-            parse_mode: Режим парсинга
-            keyboard: Клавиатура
-            
-        Returns:
-            Dict[str, int]: Статистика отправки
-        """
-        if not self.bot:
-            self.logger.error("Bot не инициализирован")
-            return {"sent": 0, "failed": 0, "total": 0}
-        
-        sent_count = 0
-        failed_count = 0
-        
-        for user_id in user_ids:
-            try:
-                await self.bot.send_message(
-                    chat_id=user_id,
-                    text=message,
-                    parse_mode=parse_mode,
-                    reply_markup=keyboard
-                )
-                sent_count += 1
                 
-                # Небольшая задержка между отправками
-                await asyncio.sleep(0.1)
+                return False
                 
-            except (TelegramBadRequest, TelegramForbiddenError) as e:
+            except Exception as e:
+                # Общая ошибка
+                notification.mark_failed(f"Неожиданная ошибка: {str(e)}")
+                await session.commit()
+                
                 self.logger.error(
-                    "Ошибка отправки массового уведомления",
-                    user_id=user_id,
-                    error=str(e)
+                    "Неожиданная ошибка при отправке уведомления",
+                    notification_id=notification_id,
+                    error=str(e),
+                    exc_info=True
                 )
-                failed_count += 1
-        
-        stats = {
-            "sent": sent_count,
-            "failed": failed_count,
-            "total": len(user_ids)
-        }
-        
-        self.logger.info(
-            "Завершена массовая рассылка",
-            **stats
-        )
-        
-        return stats
-    
-    async def send_welcome_message(self, user: User) -> bool:
-        """
-        Отправка приветственного сообщения новому пользователю.
-        
-        Args:
-            user: Новый пользователь
-            
-        Returns:
-            bool: True если сообщение отправлено
-        """
-        if not self.bot:
-            self.logger.error("Bot не инициализирован")
-            return False
-        
-        try:
-            text = (
-                f"👋 <b>Добро пожаловать, {user.first_name or 'пользователь'}!</b>\n\n"
-                "Вы успешно зарегистрировались в нашем боте.\n\n"
-                "🔹 Используйте /help для получения справки\n"
-                "🔹 Команда /subscription для управления подписками\n"
-                "🔹 Команда /support для связи с поддержкой\n\n"
-                "Начните с оформления подписки на наш закрытый канал!"
-            )
-            
-            # Создаем клавиатуру
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="💳 Оформить подписку", callback_data="new_subscription")],
-                [InlineKeyboardButton(text="📖 Справка", callback_data="help")]
-            ])
-            
-            await self.bot.send_message(
-                chat_id=user.telegram_id,
-                text=text,
-                parse_mode="HTML",
-                reply_markup=keyboard
-            )
-            
-            self.logger.info(
-                "Отправлено приветственное сообщение",
-                user_id=user.telegram_id
-            )
-            
-            return True
-            
-        except (TelegramBadRequest, TelegramForbiddenError) as e:
-            self.logger.error(
-                "Ошибка отправки приветственного сообщения",
-                user_id=user.telegram_id,
-                error=str(e)
-            )
-            return False
+                
+                return False
 
-    async def broadcast_message(
-        self,
-        message: str,
-        admin_id: int,
-        parse_mode: str = "HTML",
-        keyboard: Optional[InlineKeyboardMarkup] = None
-    ) -> Dict[str, int]:
-        """
-        Массовая рассылка сообщения всем активным пользователям.
-        
-        Args:
-            message: Текст сообщения для рассылки
-            admin_id: ID администратора, инициировавшего рассылку
-            parse_mode: Режим парсинга текста
-            keyboard: Клавиатура (опционально)
-            
-        Returns:
-            Dict[str, int]: Статистика рассылки
-        """
+    async def process_pending_notifications(self, limit: int = 100) -> int:
+        """Обработка ожидающих уведомлений"""
         if not self.bot:
-            self.logger.error("Bot не инициализирован")
-            return {"sent": 0, "failed": 0, "blocked": 0}
+            return 0
         
-        from app.services.user_service import UserService
-        
-        user_service = UserService()
-        
-        try:
-            # Получаем всех активных пользователей
-            users = await user_service.get_all_active_users()
+        async with await self._get_session() as session:
+            # Получаем уведомления для отправки
+            query = select(Notification).where(
+                and_(
+                    Notification.status == NotificationStatus.PENDING,
+                    or_(
+                        Notification.scheduled_at.is_(None),
+                        Notification.scheduled_at <= datetime.utcnow()
+                    )
+                )
+            ).order_by(
+                Notification.priority.desc(),
+                Notification.created_at
+            ).limit(limit)
             
-            if not users:
-                self.logger.warning("Нет активных пользователей для рассылки")
-                return {"sent": 0, "failed": 0, "blocked": 0}
-            
-            self.logger.info(
-                "Начинается массовая рассылка",
-                admin_id=admin_id,
-                total_users=len(users),
-                message_length=len(message)
-            )
+            result = await session.execute(query)
+            notifications = result.scalars().all()
             
             sent_count = 0
-            failed_count = 0
-            blocked_count = 0
             
-            # Отправляем сообщения пакетами по 30 пользователей с задержкой
-            batch_size = 30
-            delay_between_batches = 1  # секунда между пакетами
-            
-            for i in range(0, len(users), batch_size):
-                batch = users[i:i + batch_size]
-                
-                # Отправляем сообщения в пакете
-                tasks = []
-                for user in batch:
-                    if user.telegram_id != admin_id:  # Не отправляем админу
-                        task = self._send_broadcast_message_to_user(
-                            user.telegram_id, message, parse_mode, keyboard
-                        )
-                        tasks.append((user.telegram_id, task))
-                
-                # Ожидаем выполнения всех задач в пакете
-                results = await asyncio.gather(
-                    *[task for _, task in tasks],
-                    return_exceptions=True
-                )
-                
-                # Обрабатываем результаты
-                for (user_id, _), result in zip(tasks, results):
-                    if isinstance(result, Exception):
-                        if isinstance(result, TelegramForbiddenError):
-                            blocked_count += 1
-                            self.logger.debug(f"Пользователь {user_id} заблокировал бота")
-                        else:
-                            failed_count += 1
-                            self.logger.warning(f"Ошибка отправки пользователю {user_id}: {result}")
-                    elif result:
+            for notification in notifications:
+                try:
+                    success = await self.send_notification(notification.id)
+                    if success:
                         sent_count += 1
-                    else:
-                        failed_count += 1
-                
-                # Задержка между пакетами для соблюдения лимитов Telegram
-                if i + batch_size < len(users):
-                    await asyncio.sleep(delay_between_batches)
-            
-            stats = {
-                "sent": sent_count,
-                "failed": failed_count,
-                "blocked": blocked_count
-            }
+                    
+                    # Небольшая задержка между отправками
+                    await asyncio.sleep(0.1)
+                    
+                except Exception as e:
+                    self.logger.error(
+                        "Ошибка обработки уведомления",
+                        notification_id=notification.id,
+                        error=str(e)
+                    )
             
             self.logger.info(
-                "Массовая рассылка завершена",
-                admin_id=admin_id,
-                stats=stats
+                "Обработана партия уведомлений",
+                total=len(notifications),
+                sent=sent_count
             )
             
-            # Отправляем отчет администратору
-            report_text = (
-                "📊 <b>Отчет о рассылке</b>\n\n"
-                f"✅ Отправлено: <b>{sent_count}</b>\n"
-                f"❌ Не доставлено: <b>{failed_count}</b>\n"
-                f"🚫 Заблокировали бота: <b>{blocked_count}</b>\n\n"
-                f"📝 Общий охват: <b>{sent_count}/{len(users)} ({round(sent_count/len(users)*100, 1)}%)</b>"
-            )
-            
-            try:
-                await self.bot.send_message(
-                    chat_id=admin_id,
-                    text=report_text,
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                self.logger.error(f"Не удалось отправить отчет админу: {e}")
-            
-            return stats
-            
-        except Exception as e:
-            self.logger.error(f"Ошибка массовой рассылки: {e}", exc_info=True)
-            return {"sent": 0, "failed": 0, "blocked": 0}
+            return sent_count
 
-    async def _send_broadcast_message_to_user(
+    # Настройки пользователя
+    async def get_user_settings(self, user_telegram_id: int) -> Optional[NotificationSettings]:
+        """Получение настроек уведомлений пользователя"""
+        async with await self._get_session() as session:
+            query = select(NotificationSettings).where(
+                NotificationSettings.user_telegram_id == str(user_telegram_id)
+            )
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
+    async def create_or_update_user_settings(
+        self,
+        user_telegram_id: int,
+        **settings_data
+    ) -> NotificationSettings:
+        """Создание или обновление настроек пользователя"""
+        async with await self._get_session() as session:
+            # Пытаемся найти существующие настройки
+            query = select(NotificationSettings).where(
+                NotificationSettings.user_telegram_id == str(user_telegram_id)
+            )
+            result = await session.execute(query)
+            settings = result.scalar_one_or_none()
+            
+            if settings:
+                # Обновляем существующие настройки
+                for key, value in settings_data.items():
+                    if hasattr(settings, key):
+                        setattr(settings, key, value)
+            else:
+                # Создаем новые настройки
+                settings = NotificationSettings(
+                    user_telegram_id=str(user_telegram_id),
+                    **settings_data
+                )
+                session.add(settings)
+            
+            await session.commit()
+            await session.refresh(settings)
+            
+            return settings
+
+    # Массовые уведомления
+    async def create_broadcast_campaign(
+        self,
+        name: str,
+        message: str,
+        created_by: int,
+        target_all_users: bool = False,
+        target_active_subscribers: bool = False,
+        target_inactive_users: bool = False,
+        target_user_ids: Optional[List[int]] = None,
+        scheduled_at: Optional[datetime] = None
+    ) -> BroadcastCampaign:
+        """Создание кампании массовой рассылки"""
+        async with await self._get_session() as session:
+            campaign = BroadcastCampaign(
+                name=name,
+                message=message,
+                created_by=str(created_by),
+                target_all_users=target_all_users,
+                target_active_subscribers=target_active_subscribers,
+                target_inactive_users=target_inactive_users,
+                target_user_ids=target_user_ids,
+                scheduled_at=scheduled_at
+            )
+            
+            session.add(campaign)
+            await session.commit()
+            await session.refresh(campaign)
+            
+            # Считаем количество получателей
+            recipients_count = await self._count_broadcast_recipients(campaign)
+            campaign.total_recipients = recipients_count
+            
+            await session.commit()
+            
+            self.logger.info(
+                "Создана кампания рассылки",
+                campaign_id=campaign.id,
+                name=name,
+                recipients=recipients_count,
+                created_by=created_by
+            )
+            
+            return campaign
+
+    async def _count_broadcast_recipients(self, campaign: BroadcastCampaign) -> int:
+        """Подсчет количества получателей для кампании"""
+        async with await self._get_session() as session:
+            query = select(func.count(User.telegram_id))
+            
+            if campaign.target_user_ids:
+                query = query.where(User.telegram_id.in_(campaign.target_user_ids))
+            elif campaign.target_all_users:
+                query = query.where(User.is_active == True)
+            elif campaign.target_active_subscribers:
+                query = query.join(Subscription).where(
+                    and_(
+                        User.is_active == True,
+                        Subscription.is_active == True
+                    )
+                )
+            elif campaign.target_inactive_users:
+                # Пользователи без активных подписок
+                subquery = select(Subscription.user_id).where(Subscription.is_active == True)
+                query = query.where(
+                    and_(
+                        User.is_active == True,
+                        ~User.telegram_id.in_(subquery)
+                    )
+                )
+            
+            result = await session.execute(query)
+            return result.scalar() or 0
+
+    async def execute_broadcast_campaign(self, campaign_id: int) -> bool:
+        """Выполнение кампании массовой рассылки"""
+        async with await self._get_session() as session:
+            query = select(BroadcastCampaign).where(BroadcastCampaign.id == campaign_id)
+            result = await session.execute(query)
+            campaign = result.scalar_one_or_none()
+            
+            if not campaign or not campaign.is_active:
+                return False
+            
+            # Получаем список получателей
+            recipients = await self._get_broadcast_recipients(campaign)
+            
+            # Создаем уведомления для каждого получателя
+            for user_id in recipients:
+                await self.create_notification(
+                    user_telegram_id=user_id,
+                    type=NotificationType.BROADCAST,
+                    message=campaign.message,
+                    priority=NotificationPriority.NORMAL
+                )
+            
+            # Обновляем статус кампании
+            campaign.started_at = datetime.utcnow()
+            await session.commit()
+            
+            self.logger.info(
+                "Запущена кампания рассылки",
+                campaign_id=campaign_id,
+                recipients=len(recipients)
+            )
+            
+            return True
+
+    async def _get_broadcast_recipients(self, campaign: BroadcastCampaign) -> List[int]:
+        """Получение списка получателей для кампании"""
+        async with await self._get_session() as session:
+            query = select(User.telegram_id)
+            
+            if campaign.target_user_ids:
+                query = query.where(User.telegram_id.in_(campaign.target_user_ids))
+            elif campaign.target_all_users:
+                query = query.where(User.is_active == True)
+            elif campaign.target_active_subscribers:
+                query = query.join(Subscription).where(
+                    and_(
+                        User.is_active == True,
+                        Subscription.is_active == True
+                    )
+                )
+            elif campaign.target_inactive_users:
+                # Пользователи без активных подписок
+                subquery = select(Subscription.user_id).where(Subscription.is_active == True)
+                query = query.where(
+                    and_(
+                        User.is_active == True,
+                        ~User.telegram_id.in_(subquery)
+                    )
+                )
+            
+            result = await session.execute(query)
+            return [row[0] for row in result.fetchall()]
+
+    # Специализированные уведомления
+    async def notify_subscription_expiring(
         self,
         user_id: int,
-        message: str,
-        parse_mode: str = "HTML",
-        keyboard: Optional[InlineKeyboardMarkup] = None
-    ) -> bool:
-        """
-        Отправка сообщения конкретному пользователю (вспомогательный метод).
+        subscription_id: int,
+        days_left: int
+    ):
+        """Уведомление об истечении подписки"""
+        templates = await self.get_templates_by_type(NotificationType.SUBSCRIPTION_EXPIRING)
         
-        Args:
-            user_id: ID пользователя
-            message: Текст сообщения
-            parse_mode: Режим парсинга
-            keyboard: Клавиатура
+        if templates:
+            template = templates[0]
+            variables = {
+                "days_left": days_left,
+                "subscription_id": subscription_id,
+                "user_id": user_id
+            }
             
-        Returns:
-            bool: True если сообщение отправлено
-        """
-        try:
-            await self.bot.send_message(
-                chat_id=user_id,
-                text=message,
-                parse_mode=parse_mode,
-                reply_markup=keyboard
+            await self.create_notification_from_template(
+                user_telegram_id=user_id,
+                template_id=template.id,
+                variables=variables
             )
-            return True
+        else:
+            # Создаем базовое уведомление
+            message = f"⚠️ Ваша подписка истекает через {days_left} дн.! Продлите подписку, чтобы не потерять доступ."
             
-        except TelegramForbiddenError:
-            # Пользователь заблокировал бота
-            raise
-        except Exception as e:
-            # Другие ошибки
-            self.logger.debug(f"Ошибка отправки сообщения пользователю {user_id}: {e}")
-            return False 
+            await self.create_notification(
+                user_telegram_id=user_id,
+                type=NotificationType.SUBSCRIPTION_EXPIRING,
+                message=message,
+                priority=NotificationPriority.HIGH
+            )
+
+    async def notify_payment_success(
+        self,
+        user_id: int,
+        payment_id: int,
+        amount: Decimal
+    ):
+        """Уведомление об успешной оплате"""
+        templates = await self.get_templates_by_type(NotificationType.PAYMENT_SUCCESS)
+        
+        if templates:
+            template = templates[0]
+            variables = {
+                "amount": float(amount),
+                "payment_id": payment_id,
+                "user_id": user_id
+            }
+            
+            await self.create_notification_from_template(
+                user_telegram_id=user_id,
+                template_id=template.id,
+                variables=variables
+            )
+        else:
+            message = f"✅ Платеж на сумму {amount} ₽ успешно обработан! Ваша подписка активирована."
+            
+            await self.create_notification(
+                user_telegram_id=user_id,
+                type=NotificationType.PAYMENT_SUCCESS,
+                message=message,
+                priority=NotificationPriority.NORMAL
+            )
+
+    async def notify_referral_reward(
+        self,
+        user_id: int,
+        reward_amount: Decimal,
+        referred_user_id: int
+    ):
+        """Уведомление о реферальном вознаграждении"""
+        templates = await self.get_templates_by_type(NotificationType.REFERRAL_REWARD)
+        
+        if templates:
+            template = templates[0]
+            variables = {
+                "reward_amount": float(reward_amount),
+                "referred_user_id": referred_user_id,
+                "user_id": user_id
+            }
+            
+            await self.create_notification_from_template(
+                user_telegram_id=user_id,
+                template_id=template.id,
+                variables=variables
+            )
+        else:
+            message = f"🎉 Вы получили реферальное вознаграждение {reward_amount} ₽ за приглашение друга!"
+            
+            await self.create_notification(
+                user_telegram_id=user_id,
+                type=NotificationType.REFERRAL_REWARD,
+                message=message,
+                priority=NotificationPriority.NORMAL
+            )
+
+    async def notify_promo_code_available(
+        self,
+        user_id: int,
+        promo_code: str,
+        discount_value: str
+    ):
+        """Уведомление о доступном промокоде"""
+        templates = await self.get_templates_by_type(NotificationType.PROMO_CODE_AVAILABLE)
+        
+        if templates:
+            template = templates[0]
+            variables = {
+                "promo_code": promo_code,
+                "discount_value": discount_value,
+                "user_id": user_id
+            }
+            
+            await self.create_notification_from_template(
+                user_telegram_id=user_id,
+                template_id=template.id,
+                variables=variables
+            )
+        else:
+            message = f"🎟️ Для вас доступен промокод <code>{promo_code}</code> со скидкой {discount_value}!"
+            
+            await self.create_notification(
+                user_telegram_id=user_id,
+                type=NotificationType.PROMO_CODE_AVAILABLE,
+                message=message,
+                priority=NotificationPriority.NORMAL
+            ) 

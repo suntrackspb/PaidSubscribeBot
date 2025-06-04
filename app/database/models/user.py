@@ -89,6 +89,15 @@ class User(Base):
     )
     promo_code_usages = relationship("PromoCodeUsage", back_populates="user", cascade="all, delete-orphan")
     
+    # Уведомления
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
+    notification_settings = relationship(
+        "NotificationSettings", 
+        back_populates="user", 
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+    
     @property
     def id(self) -> int:
         """Псевдоним для telegram_id для обратной совместимости"""

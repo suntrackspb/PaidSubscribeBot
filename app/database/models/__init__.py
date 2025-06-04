@@ -9,6 +9,10 @@ from app.database.models.payment import Payment, PaymentStatus, PaymentMethod
 from app.database.models.channel import Channel
 from app.database.models.referral import Referral, ReferralSettings
 from app.database.models.promo import PromoCode, PromoCodeUsage, PromoCodeSettings, PromoCodeType
+from app.database.models.notification import (
+    Notification, NotificationTemplate, NotificationSettings, BroadcastCampaign,
+    NotificationType, NotificationStatus, NotificationPriority
+)
 
 __all__ = [
     "User",
@@ -25,4 +29,11 @@ __all__ = [
     "PromoCodeUsage", 
     "PromoCodeSettings",
     "PromoCodeType",
+    "Notification",
+    "NotificationTemplate",
+    "NotificationSettings",
+    "BroadcastCampaign",
+    "NotificationType",
+    "NotificationStatus",
+    "NotificationPriority",
 ]
